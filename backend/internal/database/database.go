@@ -57,6 +57,12 @@ func NewDatabase(config Config) (*Database, error) {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
+	// Apply schema updates for existing tables
+	if err := database.applySchemaUpdates(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to apply schema updates: %w", err)
+	}
+
 	database.logger.WithField("path", config.DatabasePath).Info("Database initialized successfully")
 	return database, nil
 }
@@ -74,6 +80,90 @@ func (db *Database) migrate() error {
 	}
 
 	db.logger.Info("Database migrations completed successfully")
+	return nil
+}
+
+// applySchemaUpdates applies incremental schema updates for existing tables
+func (db *Database) applySchemaUpdates() error {
+	// Check if file_watchers table exists
+	var tableExists bool
+	err := db.Get(&tableExists, `
+		SELECT COUNT(*) > 0 
+		FROM sqlite_master 
+		WHERE type='table' AND name='file_watchers'
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to check if file_watchers table exists: %w", err)
+	}
+
+	// If table doesn't exist, schema.sql will create it
+	if !tableExists {
+		return nil
+	}
+
+	// List of columns to check and add if missing
+	columnsToCheck := []struct {
+		name         string
+		definition   string
+		defaultValue string
+	}{
+		{
+			name:         "import_status",
+			definition:   "TEXT DEFAULT 'pending'",
+			defaultValue: "'pending'",
+		},
+		{
+			name:         "sessions_imported",
+			definition:   "INTEGER DEFAULT 0",
+			defaultValue: "0",
+		},
+		{
+			name:         "messages_imported",
+			definition:   "INTEGER DEFAULT 0",
+			defaultValue: "0",
+		},
+		{
+			name:         "last_error",
+			definition:   "TEXT",
+			defaultValue: "NULL",
+		},
+	}
+
+	// Check and add each column if it doesn't exist
+	for _, col := range columnsToCheck {
+		var columnExists bool
+		err = db.Get(&columnExists, `
+			SELECT COUNT(*) > 0 
+			FROM pragma_table_info('file_watchers') 
+			WHERE name = ?
+		`, col.name)
+		if err != nil {
+			return fmt.Errorf("failed to check for %s column: %w", col.name, err)
+		}
+
+		// If column doesn't exist, add it
+		if !columnExists {
+			db.logger.Infof("Adding missing %s column to file_watchers table", col.name)
+			
+			_, err = db.Exec(fmt.Sprintf(`
+				ALTER TABLE file_watchers ADD COLUMN %s %s
+			`, col.name, col.definition))
+			if err != nil {
+				return fmt.Errorf("failed to add %s column: %w", col.name, err)
+			}
+			
+			// Update any existing rows
+			_, err = db.Exec(fmt.Sprintf(`
+				UPDATE file_watchers SET %s = %s WHERE %s IS NULL
+			`, col.name, col.defaultValue, col.name))
+			if err != nil {
+				return fmt.Errorf("failed to update %s values: %w", col.name, err)
+			}
+			
+			db.logger.Infof("Successfully added %s column to file_watchers table", col.name)
+		}
+	}
+
 	return nil
 }
 
