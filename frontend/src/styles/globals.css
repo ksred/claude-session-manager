@@ -1,16 +1,14 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --foreground-rgb: 0, 0, 0;
-    --background-start-rgb: 255, 255, 255;
-    --background-end-rgb: 255, 255, 255;
-  }
-
   * {
     box-sizing: border-box;
+    margin: 0;
+    padding: 0;
   }
 
   html {
@@ -19,30 +17,95 @@
   }
 
   body {
-    color: rgb(var(--foreground-rgb));
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+    @apply bg-gray-900 text-gray-100 font-mono overflow-hidden;
+    height: 100vh;
+  }
+
+  #root {
+    height: 100vh;
   }
 }
 
 @layer components {
+  /* Terminal-style components */
+  .terminal-container {
+    @apply bg-gray-850 border-2 border-gray-700 rounded-lg shadow-2xl;
+    @apply shadow-primary/10 font-mono;
+  }
+
+  .glass-panel {
+    @apply bg-gray-800/80 backdrop-blur-md border border-white/10 shadow-xl rounded-xl;
+  }
+
+  /* Session components */
+  .session-item {
+    @apply bg-gray-850 border border-gray-700 rounded-lg p-3 cursor-pointer;
+    @apply transition-all duration-200 hover:border-gray-600 hover:bg-gray-800;
+  }
+
+  .session-item.active {
+    @apply border-primary bg-primary/5 shadow-lg shadow-primary/20;
+  }
+
+  /* Status badges */
+  .status-working {
+    @apply bg-primary/20 text-primary px-2 py-1 rounded text-xs font-medium;
+    animation: pulse 2s infinite;
+  }
+
+  .status-idle {
+    @apply bg-warning/20 text-warning px-2 py-1 rounded text-xs font-medium;
+  }
+
+  .status-complete {
+    @apply bg-success/20 text-success px-2 py-1 rounded text-xs font-medium;
+  }
+
+  .status-error {
+    @apply bg-error/20 text-error px-2 py-1 rounded text-xs font-medium;
+  }
+
+  /* Custom scrollbars */
+  .scrollbar-custom::-webkit-scrollbar {
+    @apply w-1.5;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-track {
+    @apply bg-gray-900;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-thumb {
+    @apply bg-gray-700 rounded-full;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-600;
+  }
+
+  /* Button styles */
   .btn {
     @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
   }
 
   .btn-primary {
-    @apply bg-primary-600 text-white hover:bg-primary-700;
+    @apply bg-primary/10 border border-primary text-primary hover:bg-primary/20;
   }
 
   .btn-secondary {
-    @apply bg-gray-200 text-gray-700 hover:bg-gray-300;
+    @apply bg-gray-700 text-gray-300 hover:bg-gray-600;
   }
 
-  .card {
-    @apply bg-white rounded-lg shadow-md p-6;
+  /* Card styles */
+  .metric-card {
+    @apply bg-gray-800 border border-gray-700 rounded-lg p-4;
+  }
+
+  .activity-card {
+    @apply bg-gray-800 border border-gray-700 rounded-lg p-4;
+  }
+
+  /* Analytics Section */
+  .analytics-section {
+    @apply bg-gray-900 border border-gray-700 rounded-lg p-6;
   }
 }

@@ -1,0 +1,115 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { sessionService } from '../services/sessionService';
+
+// Query keys for cache management
+export const sessionKeys = {
+  all: ['sessions'] as const,
+  lists: () => [...sessionKeys.all, 'list'] as const,
+  list: (filters: Record<string, any>) => [...sessionKeys.lists(), { filters }] as const,
+  details: () => [...sessionKeys.all, 'detail'] as const,
+  detail: (id: string) => [...sessionKeys.details(), id] as const,
+  metrics: () => ['metrics'] as const,
+  activity: () => ['activity'] as const,
+  usage: () => ['usage'] as const,
+};
+
+// Get all sessions
+export const useAllSessions = () => {
+  return useQuery({
+    queryKey: sessionKeys.list({}),
+    queryFn: sessionService.getAllSessions,
+    staleTime: 30000, // 30 seconds
+    refetchInterval: 60000, // 1 minute
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  });
+};
+
+// Get active sessions only
+export const useActiveSessions = () => {
+  return useQuery({
+    queryKey: sessionKeys.list({ active: true }),
+    queryFn: sessionService.getActiveSessions,
+    staleTime: 10000, // 10 seconds (more frequent for active sessions)
+    refetchInterval: 30000, // 30 seconds
+    retry: 3,
+  });
+};
+
+// Get recent sessions
+export const useRecentSessions = (limit: number = 10) => {
+  return useQuery({
+    queryKey: sessionKeys.list({ recent: true, limit }),
+    queryFn: () => sessionService.getRecentSessions(limit),
+    staleTime: 30000,
+    refetchInterval: 60000,
+    retry: 3,
+  });
+};
+
+// Get session by ID
+export const useSession = (sessionId: string | null) => {
+  return useQuery({
+    queryKey: sessionKeys.detail(sessionId || ''),
+    queryFn: () => sessionService.getSessionById(sessionId!),
+    enabled: !!sessionId,
+    staleTime: 30000,
+    retry: 3,
+  });
+};
+
+// Get metrics summary
+export const useMetricsSummary = () => {
+  return useQuery({
+    queryKey: sessionKeys.metrics(),
+    queryFn: sessionService.getMetricsSummary,
+    staleTime: 60000, // 1 minute
+    refetchInterval: 120000, // 2 minutes
+    retry: 3,
+  });
+};
+
+// Get usage statistics
+export const useUsageStats = () => {
+  return useQuery({
+    queryKey: sessionKeys.usage(),
+    queryFn: sessionService.getUsageStats,
+    staleTime: 300000, // 5 minutes
+    refetchInterval: 600000, // 10 minutes
+    retry: 3,
+  });
+};
+
+// Get activity timeline
+export const useActivity = (limit: number = 50) => {
+  return useQuery({
+    queryKey: sessionKeys.activity(),
+    queryFn: () => sessionService.getActivity(limit),
+    staleTime: 15000, // 15 seconds
+    refetchInterval: 30000, // 30 seconds
+    retry: 3,
+  });
+};
+
+// Search sessions
+export const useSearchSessions = (query: string) => {
+  return useQuery({
+    queryKey: sessionKeys.list({ search: query }),
+    queryFn: () => sessionService.searchSessions(query),
+    enabled: query.length > 0,
+    staleTime: 60000,
+    retry: 2,
+  });
+};
+
+// Hook for manual refresh of all data
+export const useRefreshData = () => {
+  const queryClient = useQueryClient();
+  
+  return () => {
+    queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+    queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
+    queryClient.invalidateQueries({ queryKey: sessionKeys.activity() });
+    queryClient.invalidateQueries({ queryKey: sessionKeys.usage() });
+  };
+};
