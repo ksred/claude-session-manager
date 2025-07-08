@@ -865,3 +865,353 @@ func (r *SessionRepository) readSessionFile(filePath string) ([]SessionMessage, 
 
 	return messages, scanner.Err()
 }
+
+// GetModelPerformanceStats returns detailed performance statistics for each model
+func (r *SessionRepository) GetModelPerformanceStats() (map[string]ModelPerformanceStats, error) {
+	sessions, err := r.GetAllSessions()
+	if err != nil {
+		return nil, err
+	}
+
+	modelStats := make(map[string]ModelPerformanceStats)
+
+	for _, session := range sessions {
+		if session.Model == "" {
+			continue
+		}
+
+		stats, exists := modelStats[session.Model]
+		if !exists {
+			stats = ModelPerformanceStats{
+				Model: session.Model,
+			}
+		}
+
+		stats.TotalSessions++
+		// Add tokens individually
+		stats.TotalTokens.InputTokens += session.TotalTokens.InputTokens
+		stats.TotalTokens.OutputTokens += session.TotalTokens.OutputTokens
+		stats.TotalTokens.CacheCreationInputTokens += session.TotalTokens.CacheCreationInputTokens
+		stats.TotalTokens.CacheReadInputTokens += session.TotalTokens.CacheReadInputTokens
+		stats.TotalDuration += session.Duration
+		
+		// Track cached vs fresh tokens
+		stats.CachedTokens += session.TotalTokens.CacheReadInputTokens
+		stats.FreshTokens += session.TotalTokens.InputTokens + session.TotalTokens.OutputTokens + session.TotalTokens.CacheCreationInputTokens
+
+		modelStats[session.Model] = stats
+	}
+
+	// Calculate averages and cache efficiency
+	for model, stats := range modelStats {
+		if stats.TotalSessions > 0 {
+			stats.AvgTokensPerSession = stats.TotalTokens.InputTokens + stats.TotalTokens.OutputTokens + 
+				stats.TotalTokens.CacheCreationInputTokens + stats.TotalTokens.CacheReadInputTokens
+			stats.AvgTokensPerSession /= stats.TotalSessions
+			stats.AvgDurationSeconds = int64(stats.TotalDuration.Seconds()) / int64(stats.TotalSessions)
+			
+			totalTokens := stats.FreshTokens + stats.CachedTokens
+			if totalTokens > 0 {
+				stats.CacheEfficiency = float64(stats.CachedTokens) / float64(totalTokens)
+			}
+		}
+		modelStats[model] = stats
+	}
+
+	return modelStats, nil
+}
+
+// GetTimeSeriesData returns time series analytics data
+func (r *SessionRepository) GetTimeSeriesData(period string, days int) ([]TimeSeriesData, error) {
+	sessions, err := r.GetAllSessions()
+	if err != nil {
+		return nil, err
+	}
+
+	// Group data by date
+	dataByDate := make(map[string]*TimeSeriesData)
+	now := time.Now()
+	cutoffTime := now.AddDate(0, 0, -days)
+
+	for _, session := range sessions {
+		if session.StartTime.Before(cutoffTime) {
+			continue
+		}
+
+		dateKey := session.StartTime.Format("2006-01-02")
+		
+		data, exists := dataByDate[dateKey]
+		if !exists {
+			data = &TimeSeriesData{
+				Date:   dateKey,
+				Models: make(map[string]ModelUsageData),
+			}
+			dataByDate[dateKey] = data
+		}
+
+		data.Sessions++
+		data.Messages += session.MessageCount
+		data.TotalTokens += session.TotalTokens.InputTokens + session.TotalTokens.OutputTokens + 
+			session.TotalTokens.CacheCreationInputTokens + session.TotalTokens.CacheReadInputTokens
+
+		// Track model usage
+		if session.Model != "" {
+			modelData := data.Models[session.Model]
+			modelData.Sessions++
+			modelData.Tokens += session.TotalTokens.InputTokens + session.TotalTokens.OutputTokens + 
+				session.TotalTokens.CacheCreationInputTokens + session.TotalTokens.CacheReadInputTokens
+			data.Models[session.Model] = modelData
+		}
+	}
+
+	// Convert map to sorted slice
+	var result []TimeSeriesData
+	for _, data := range dataByDate {
+		result = append(result, *data)
+	}
+
+	// Sort by date
+	for i := 0; i < len(result)-1; i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[i].Date > result[j].Date {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+
+	// Aggregate by period if needed
+	if period == "week" || period == "month" {
+		result = r.aggregateTimeSeriesData(result, period)
+	}
+
+	return result, nil
+}
+
+// GetCostAnalytics returns cost analytics data grouped by the specified dimension
+func (r *SessionRepository) GetCostAnalytics(groupBy string, days int) (*CostAnalyticsData, error) {
+	sessions, err := r.GetAllSessions()
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	cutoffTime := now.AddDate(0, 0, -days)
+
+	totalCost := 0.0
+	totalCacheSavings := 0.0
+	breakdown := make(map[string]*CostBreakdownData)
+
+	for _, session := range sessions {
+		if session.StartTime.Before(cutoffTime) {
+			continue
+		}
+
+		cost := r.calculateSessionCost(session.TotalTokens)
+		cacheSavings := r.calculateCacheSavings(session.TotalTokens)
+		
+		totalCost += cost
+		totalCacheSavings += cacheSavings
+
+		// Group by specified dimension
+		var groupKey string
+		switch groupBy {
+		case "model":
+			groupKey = session.Model
+			if groupKey == "" {
+				groupKey = "unknown"
+			}
+		case "day":
+			groupKey = session.StartTime.Format("2006-01-02")
+		default: // project
+			groupKey = session.ProjectName
+		}
+
+		data, exists := breakdown[groupKey]
+		if !exists {
+			data = &CostBreakdownData{
+				Name: groupKey,
+			}
+			breakdown[groupKey] = data
+		}
+
+		data.Cost += cost
+		data.Sessions++
+		data.TotalTokens += session.TotalTokens.InputTokens + session.TotalTokens.OutputTokens + 
+			session.TotalTokens.CacheCreationInputTokens + session.TotalTokens.CacheReadInputTokens
+		data.CachedTokens += session.TotalTokens.CacheReadInputTokens
+		data.FreshTokens += session.TotalTokens.InputTokens + session.TotalTokens.OutputTokens + 
+			session.TotalTokens.CacheCreationInputTokens
+	}
+
+	// Calculate percentages and convert to slice
+	var breakdownList []CostBreakdownData
+	for _, data := range breakdown {
+		if totalCost > 0 {
+			data.Percentage = data.Cost / totalCost
+		}
+		breakdownList = append(breakdownList, *data)
+	}
+
+	// Sort by cost (highest first)
+	for i := 0; i < len(breakdownList)-1; i++ {
+		for j := i + 1; j < len(breakdownList); j++ {
+			if breakdownList[j].Cost > breakdownList[i].Cost {
+				breakdownList[i], breakdownList[j] = breakdownList[j], breakdownList[i]
+			}
+		}
+	}
+
+	// Calculate projections
+	dailyAverage := totalCost / float64(days)
+	monthlyEstimate := dailyAverage * 30
+
+	return &CostAnalyticsData{
+		TotalCost:       totalCost,
+		CacheSavings:    totalCacheSavings,
+		Breakdown:       breakdownList,
+		DailyAverage:    dailyAverage,
+		MonthlyEstimate: monthlyEstimate,
+	}, nil
+}
+
+// Helper method to calculate session cost
+func (r *SessionRepository) calculateSessionCost(tokens RepositoryTokenUsage) float64 {
+	const (
+		inputCostPer1M         = 15.0
+		outputCostPer1M        = 75.0
+		cacheReadCostPer1M     = 1.50
+		cacheCreationCostPer1M = 18.75
+	)
+
+	cost := float64(tokens.InputTokens) * inputCostPer1M / 1000000
+	cost += float64(tokens.OutputTokens) * outputCostPer1M / 1000000
+	cost += float64(tokens.CacheReadInputTokens) * cacheReadCostPer1M / 1000000
+	cost += float64(tokens.CacheCreationInputTokens) * cacheCreationCostPer1M / 1000000
+
+	return cost
+}
+
+// Helper method to calculate cache savings
+func (r *SessionRepository) calculateCacheSavings(tokens RepositoryTokenUsage) float64 {
+	const (
+		inputCostPer1M     = 15.0
+		cacheReadCostPer1M = 1.50
+	)
+
+	// Savings = (cost if it were fresh tokens) - (actual cache cost)
+	freshCost := float64(tokens.CacheReadInputTokens) * inputCostPer1M / 1000000
+	cacheCost := float64(tokens.CacheReadInputTokens) * cacheReadCostPer1M / 1000000
+
+	return freshCost - cacheCost
+}
+
+// Helper method to aggregate time series data by period
+func (r *SessionRepository) aggregateTimeSeriesData(data []TimeSeriesData, period string) []TimeSeriesData {
+	if len(data) == 0 {
+		return data
+	}
+
+	aggregated := make(map[string]*TimeSeriesData)
+
+	for _, entry := range data {
+		date, _ := time.Parse("2006-01-02", entry.Date)
+		
+		var key string
+		if period == "week" {
+			// Group by start of week (Monday)
+			weekStart := date.AddDate(0, 0, -int(date.Weekday()-time.Monday))
+			if date.Weekday() == time.Sunday {
+				weekStart = date.AddDate(0, 0, -6)
+			}
+			key = weekStart.Format("2006-01-02")
+		} else { // month
+			key = date.Format("2006-01")
+		}
+
+		agg, exists := aggregated[key]
+		if !exists {
+			agg = &TimeSeriesData{
+				Date:   key,
+				Models: make(map[string]ModelUsageData),
+			}
+			aggregated[key] = agg
+		}
+
+		agg.Sessions += entry.Sessions
+		agg.Messages += entry.Messages
+		agg.TotalTokens += entry.TotalTokens
+
+		// Merge model data
+		for model, modelData := range entry.Models {
+			aggModel := agg.Models[model]
+			aggModel.Sessions += modelData.Sessions
+			aggModel.Tokens += modelData.Tokens
+			agg.Models[model] = aggModel
+		}
+	}
+
+	// Convert back to slice and sort
+	var result []TimeSeriesData
+	for _, agg := range aggregated {
+		result = append(result, *agg)
+	}
+
+	// Sort by date
+	for i := 0; i < len(result)-1; i++ {
+		for j := i + 1; j < len(result); j++ {
+			if result[i].Date > result[j].Date {
+				result[i], result[j] = result[j], result[i]
+			}
+		}
+	}
+
+	return result
+}
+
+// ModelPerformanceStats holds performance statistics for a model
+type ModelPerformanceStats struct {
+	Model               string
+	TotalSessions       int
+	TotalTokens         RepositoryTokenUsage
+	TotalDuration       time.Duration
+	AvgTokensPerSession int
+	AvgDurationSeconds  int64
+	CacheEfficiency     float64
+	CachedTokens        int
+	FreshTokens         int
+}
+
+// TimeSeriesData represents analytics data for a time period
+type TimeSeriesData struct {
+	Date        string
+	Sessions    int
+	Messages    int
+	TotalTokens int
+	Models      map[string]ModelUsageData
+}
+
+// ModelUsageData represents model usage within a time period
+type ModelUsageData struct {
+	Sessions int
+	Tokens   int
+}
+
+// CostAnalyticsData represents cost analytics response data
+type CostAnalyticsData struct {
+	TotalCost       float64
+	CacheSavings    float64
+	Breakdown       []CostBreakdownData
+	DailyAverage    float64
+	MonthlyEstimate float64
+}
+
+// CostBreakdownData represents cost data for a group
+type CostBreakdownData struct {
+	Name         string
+	Cost         float64
+	Sessions     int
+	TotalTokens  int
+	CachedTokens int
+	FreshTokens  int
+	Percentage   float64
+}

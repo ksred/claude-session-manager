@@ -31,6 +31,14 @@ func (s *Server) setupRoutes() {
 			metrics.GET("/usage", s.getUsageStatsHandler)
 		}
 
+		// Analytics routes
+		analytics := v1.Group("/analytics")
+		{
+			analytics.GET("/models", s.getModelPerformanceHandler)
+			analytics.GET("/timeseries", s.getTimeSeriesHandler)
+			analytics.GET("/costs", s.getCostAnalyticsHandler)
+		}
+
 		// Search routes
 		v1.GET("/search", s.searchHandler)
 

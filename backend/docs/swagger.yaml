@@ -35,6 +35,50 @@ definitions:
         example: 100
         type: integer
     type: object
+  api.CostAnalyticsResponse:
+    description: Cost analytics data with breakdown and projections
+    properties:
+      breakdown:
+        items:
+          $ref: '#/definitions/api.CostBreakdownEntry'
+        type: array
+      cache_savings:
+        example: 35.2
+        type: number
+      projection:
+        $ref: '#/definitions/api.CostProjection'
+      total_cost:
+        example: 125.5
+        type: number
+    type: object
+  api.CostBreakdownEntry:
+    description: Cost breakdown for a specific group (project, model, or day)
+    properties:
+      cost:
+        example: 45.3
+        type: number
+      name:
+        example: my-app
+        type: string
+      percentage:
+        example: 0.36
+        type: number
+      sessions:
+        example: 23
+        type: integer
+      tokens:
+        $ref: '#/definitions/api.TokenBreakdown'
+    type: object
+  api.CostProjection:
+    description: Projected cost estimates
+    properties:
+      daily_average:
+        example: 4.18
+        type: number
+      monthly_estimate:
+        example: 125.4
+        type: number
+    type: object
   api.DailySessionCount:
     description: Daily session count information
     properties:
@@ -101,6 +145,51 @@ definitions:
         type: integer
       total_tokens_used:
         example: 125000
+        type: integer
+    type: object
+  api.ModelPerformanceEntry:
+    description: Performance data for a Claude model with statistics
+    properties:
+      display_name:
+        example: Claude 3 Opus
+        type: string
+      model:
+        example: claude-3-opus-20240229
+        type: string
+      stats:
+        $ref: '#/definitions/api.ModelStats'
+    type: object
+  api.ModelPerformanceResponse:
+    description: Model performance comparison data
+    properties:
+      models:
+        items:
+          $ref: '#/definitions/api.ModelPerformanceEntry'
+        type: array
+    type: object
+  api.ModelStats:
+    description: Performance statistics for a Claude model
+    properties:
+      avg_cost_per_session:
+        example: 0.57
+        type: number
+      avg_session_duration_seconds:
+        example: 3600
+        type: integer
+      avg_tokens_per_session:
+        example: 27777
+        type: integer
+      cache_efficiency:
+        example: 0.45
+        type: number
+      total_cost:
+        example: 25.5
+        type: number
+      total_sessions:
+        example: 45
+        type: integer
+      total_tokens:
+        example: 1250000
         type: integer
     type: object
   api.PeakHourInfo:
@@ -209,6 +298,67 @@ definitions:
         example: 42
         type: integer
     type: object
+  api.TimeSeriesEntry:
+    description: Analytics data for a specific time period
+    properties:
+      date:
+        example: "2024-01-08"
+        type: string
+      messages:
+        example: 145
+        type: integer
+      models:
+        additionalProperties:
+          $ref: '#/definitions/api.TimeSeriesModelData'
+        type: object
+      sessions:
+        example: 12
+        type: integer
+      total_cost:
+        example: 2.5
+        type: number
+      total_tokens:
+        example: 125000
+        type: integer
+    type: object
+  api.TimeSeriesModelData:
+    description: Model usage data for a specific time period
+    properties:
+      sessions:
+        example: 3
+        type: integer
+      tokens:
+        example: 75000
+        type: integer
+    type: object
+  api.TimeSeriesResponse:
+    description: Time series analytics data
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/api.TimeSeriesEntry'
+        type: array
+      period:
+        enum:
+        - day
+        - week
+        - month
+        example: day
+        type: string
+    type: object
+  api.TokenBreakdown:
+    description: Detailed token usage breakdown
+    properties:
+      cached:
+        example: 180000
+        type: integer
+      fresh:
+        example: 270000
+        type: integer
+      total:
+        example: 450000
+        type: integer
+    type: object
   api.UsageStats:
     description: Usage statistics and analytics
     properties:
@@ -269,6 +419,104 @@ info:
   title: Claude Session Manager API
   version: 1.0.0
 paths:
+  /analytics/costs:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve cost breakdown by project, model, or day with projections
+        and cache savings
+      parameters:
+      - default: project
+        description: Group costs by
+        enum:
+        - project
+        - model
+        - day
+        in: query
+        name: group_by
+        type: string
+      - default: 30
+        description: Number of days to analyze
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved cost analytics
+          schema:
+            $ref: '#/definitions/api.CostAnalyticsResponse'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get cost analytics
+      tags:
+      - Analytics
+  /analytics/models:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve performance statistics for each Claude model including
+        token usage, costs, and cache efficiency
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved model performance data
+          schema:
+            $ref: '#/definitions/api.ModelPerformanceResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get model performance comparison
+      tags:
+      - Analytics
+  /analytics/timeseries:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve time series data showing sessions, messages, tokens, and
+        costs over time
+      parameters:
+      - default: day
+        description: Time period granularity
+        enum:
+        - day
+        - week
+        - month
+        in: query
+        name: period
+        type: string
+      - default: 30
+        description: Number of days to look back
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved time series data
+          schema:
+            $ref: '#/definitions/api.TimeSeriesResponse'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get time series analytics
+      tags:
+      - Analytics
   /health:
     get:
       consumes:

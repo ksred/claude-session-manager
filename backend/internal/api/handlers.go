@@ -543,3 +543,245 @@ func (s *Server) searchHandler(c *gin.Context) {
 		"total":   len(results),
 	})
 }
+
+// getModelPerformanceHandler returns model performance comparison data
+// @Summary Get model performance comparison
+// @Description Retrieve performance statistics for each Claude model including token usage, costs, and cache efficiency
+// @Tags Analytics
+// @Accept json
+// @Produce json
+// @Success 200 {object} ModelPerformanceResponse "Successfully retrieved model performance data"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /analytics/models [get]
+func (s *Server) getModelPerformanceHandler(c *gin.Context) {
+	modelStats, err := s.sessionRepo.GetModelPerformanceStats()
+	if err != nil {
+		s.logger.WithError(err).Error("Failed to get model performance stats")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve model performance data",
+		})
+		return
+	}
+
+	// Map model names to display names
+	modelDisplayNames := map[string]string{
+		"claude-3-opus-20240229":    "Claude 3 Opus",
+		"claude-3-sonnet-20240229":  "Claude 3 Sonnet",
+		"claude-3-haiku-20240307":   "Claude 3 Haiku",
+		"claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
+		"claude-3-5-haiku-20241022":  "Claude 3.5 Haiku",
+	}
+
+	var models []ModelPerformanceEntry
+	for model, stats := range modelStats {
+		displayName := modelDisplayNames[model]
+		if displayName == "" {
+			displayName = model // Fallback to model ID if no display name
+		}
+
+		// Calculate total tokens and cost
+		totalTokens := stats.TotalTokens.InputTokens + stats.TotalTokens.OutputTokens +
+			stats.TotalTokens.CacheCreationInputTokens + stats.TotalTokens.CacheReadInputTokens
+		totalCost := s.calculateCostFromTokens(stats.TotalTokens)
+
+		// Calculate averages
+		avgCost := 0.0
+		if stats.TotalSessions > 0 {
+			avgCost = totalCost / float64(stats.TotalSessions)
+		}
+
+		entry := ModelPerformanceEntry{
+			Model:       model,
+			DisplayName: displayName,
+			Stats: ModelStats{
+				TotalSessions:          stats.TotalSessions,
+				TotalTokens:            totalTokens,
+				TotalCost:              totalCost,
+				AvgTokensPerSession:    stats.AvgTokensPerSession,
+				AvgCostPerSession:      avgCost,
+				CacheEfficiency:        stats.CacheEfficiency,
+				AvgSessionDurationSecs: stats.AvgDurationSeconds,
+			},
+		}
+		models = append(models, entry)
+	}
+
+	// Sort by total sessions (most used first)
+	sort.Slice(models, func(i, j int) bool {
+		return models[i].Stats.TotalSessions > models[j].Stats.TotalSessions
+	})
+
+	c.JSON(http.StatusOK, ModelPerformanceResponse{
+		Models: models,
+	})
+}
+
+// getTimeSeriesHandler returns time series analytics data
+// @Summary Get time series analytics
+// @Description Retrieve time series data showing sessions, messages, tokens, and costs over time
+// @Tags Analytics
+// @Accept json
+// @Produce json
+// @Param period query string false "Time period granularity" Enums(day, week, month) Default(day)
+// @Param days query int false "Number of days to look back" Default(30)
+// @Success 200 {object} TimeSeriesResponse "Successfully retrieved time series data"
+// @Failure 400 {object} ErrorResponse "Invalid query parameters"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /analytics/timeseries [get]
+func (s *Server) getTimeSeriesHandler(c *gin.Context) {
+	// Parse query parameters
+	period := c.DefaultQuery("period", "day")
+	daysStr := c.DefaultQuery("days", "30")
+
+	// Validate period
+	if period != "day" && period != "week" && period != "month" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid period. Must be 'day', 'week', or 'month'",
+		})
+		return
+	}
+
+	// Parse days
+	days, err := strconv.Atoi(daysStr)
+	if err != nil || days < 1 || days > 365 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid days parameter. Must be between 1 and 365",
+		})
+		return
+	}
+
+	// Get time series data
+	timeSeriesData, err := s.sessionRepo.GetTimeSeriesData(period, days)
+	if err != nil {
+		s.logger.WithError(err).Error("Failed to get time series data")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve time series data",
+		})
+		return
+	}
+
+	// Convert to API response format
+	var entries []TimeSeriesEntry
+	for _, data := range timeSeriesData {
+		// Calculate total cost for this period
+		totalCost := 0.0
+		models := make(map[string]TimeSeriesModelData)
+
+		for model, usage := range data.Models {
+			// Estimate cost based on token usage (simplified calculation)
+			modelCost := float64(usage.Tokens) * 15.0 / 1000000 // Rough average cost
+			totalCost += modelCost
+
+			models[model] = TimeSeriesModelData{
+				Sessions: usage.Sessions,
+				Tokens:   usage.Tokens,
+			}
+		}
+
+		entry := TimeSeriesEntry{
+			Date:        data.Date,
+			Sessions:    data.Sessions,
+			Messages:    data.Messages,
+			TotalTokens: data.TotalTokens,
+			TotalCost:   totalCost,
+			Models:      models,
+		}
+		entries = append(entries, entry)
+	}
+
+	c.JSON(http.StatusOK, TimeSeriesResponse{
+		Period: period,
+		Data:   entries,
+	})
+}
+
+// getCostAnalyticsHandler returns cost analytics data
+// @Summary Get cost analytics
+// @Description Retrieve cost breakdown by project, model, or day with projections and cache savings
+// @Tags Analytics
+// @Accept json
+// @Produce json
+// @Param group_by query string false "Group costs by" Enums(project, model, day) Default(project)
+// @Param days query int false "Number of days to analyze" Default(30)
+// @Success 200 {object} CostAnalyticsResponse "Successfully retrieved cost analytics"
+// @Failure 400 {object} ErrorResponse "Invalid query parameters"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /analytics/costs [get]
+func (s *Server) getCostAnalyticsHandler(c *gin.Context) {
+	// Parse query parameters
+	groupBy := c.DefaultQuery("group_by", "project")
+	daysStr := c.DefaultQuery("days", "30")
+
+	// Validate groupBy
+	if groupBy != "project" && groupBy != "model" && groupBy != "day" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid group_by parameter. Must be 'project', 'model', or 'day'",
+		})
+		return
+	}
+
+	// Parse days
+	days, err := strconv.Atoi(daysStr)
+	if err != nil || days < 1 || days > 365 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid days parameter. Must be between 1 and 365",
+		})
+		return
+	}
+
+	// Get cost analytics data
+	costData, err := s.sessionRepo.GetCostAnalytics(groupBy, days)
+	if err != nil {
+		s.logger.WithError(err).Error("Failed to get cost analytics")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve cost analytics",
+		})
+		return
+	}
+
+	// Convert to API response format
+	var breakdown []CostBreakdownEntry
+	for _, data := range costData.Breakdown {
+		entry := CostBreakdownEntry{
+			Name:       data.Name,
+			Cost:       data.Cost,
+			Tokens:     TokenBreakdown{
+				Total:  data.TotalTokens,
+				Cached: data.CachedTokens,
+				Fresh:  data.FreshTokens,
+			},
+			Sessions:   data.Sessions,
+			Percentage: data.Percentage,
+		}
+		breakdown = append(breakdown, entry)
+	}
+
+	response := CostAnalyticsResponse{
+		TotalCost:    costData.TotalCost,
+		CacheSavings: costData.CacheSavings,
+		Breakdown:    breakdown,
+		Projection: CostProjection{
+			DailyAverage:    costData.DailyAverage,
+			MonthlyEstimate: costData.MonthlyEstimate,
+		},
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// Helper method to calculate cost from detailed token usage
+func (s *Server) calculateCostFromTokens(tokens claude.RepositoryTokenUsage) float64 {
+	const (
+		inputCostPer1M         = 15.0
+		outputCostPer1M        = 75.0
+		cacheReadCostPer1M     = 1.50
+		cacheCreationCostPer1M = 18.75
+	)
+
+	cost := float64(tokens.InputTokens) * inputCostPer1M / 1000000
+	cost += float64(tokens.OutputTokens) * outputCostPer1M / 1000000
+	cost += float64(tokens.CacheReadInputTokens) * cacheReadCostPer1M / 1000000
+	cost += float64(tokens.CacheCreationInputTokens) * cacheCreationCostPer1M / 1000000
+
+	return cost
+}
