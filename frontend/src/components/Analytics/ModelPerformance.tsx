@@ -1,5 +1,5 @@
-import React from 'react';
-import { useModelPerformance } from '../../hooks/useAnalytics';
+import React, { useMemo } from 'react';
+import { useAllSessions, useMetricsSummary } from '../../hooks/useSessionData';
 import { formatTokens, formatCost } from '../../utils/formatters';
 import { LoadingState } from '../Common/LoadingState';
 import { ErrorMessage } from '../Common/ErrorMessage';
@@ -10,17 +10,63 @@ interface ModelPerformanceProps {
 }
 
 export const ModelPerformance: React.FC<ModelPerformanceProps> = ({ className }) => {
-  const { data, isLoading, error } = useModelPerformance();
+  const { data: sessionsData, isLoading: sessionsLoading, error: sessionsError } = useAllSessions();
+  const { isLoading: metricsLoading, error: metricsError } = useMetricsSummary();
 
-  if (isLoading) {
+  const modelStats = useMemo(() => {
+    if (!sessionsData?.sessions) return [];
+
+    const models = new Map<string, {
+      total_sessions: number;
+      total_tokens: number;
+      total_cost: number;
+      total_cache_tokens: number;
+      total_duration: number;
+    }>();
+
+    sessionsData.sessions.forEach(session => {
+      const model = session.model || 'unknown';
+      const stats = models.get(model) || {
+        total_sessions: 0,
+        total_tokens: 0,
+        total_cost: 0,
+        total_cache_tokens: 0,
+        total_duration: 0
+      };
+
+      stats.total_sessions++;
+      stats.total_tokens += session.tokens_used.total_tokens;
+      stats.total_cost += session.tokens_used.estimated_cost;
+      stats.total_cache_tokens += session.tokens_used.cache_creation_input_tokens + session.tokens_used.cache_read_input_tokens;
+      stats.total_duration += session.duration_seconds;
+
+      models.set(model, stats);
+    });
+
+    return Array.from(models.entries()).map(([model, stats]) => ({
+      model,
+      display_name: model.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+      stats: {
+        total_sessions: stats.total_sessions,
+        total_tokens: stats.total_tokens,
+        total_cost: stats.total_cost,
+        avg_tokens_per_session: Math.round(stats.total_tokens / stats.total_sessions),
+        avg_cost_per_session: stats.total_cost / stats.total_sessions,
+        cache_efficiency: stats.total_tokens > 0 ? stats.total_cache_tokens / stats.total_tokens : 0,
+        avg_session_duration_seconds: Math.round(stats.total_duration / stats.total_sessions)
+      }
+    }));
+  }, [sessionsData]);
+
+  if (sessionsLoading || metricsLoading) {
     return <LoadingState message="Loading model performance..." />;
   }
 
-  if (error) {
-    return <ErrorMessage title="Failed to load model performance" message={error.message} />;
+  if (sessionsError || metricsError) {
+    return <ErrorMessage title="Failed to load model performance" message={sessionsError?.message || metricsError?.message || 'Unknown error'} />;
   }
 
-  if (!data || data.models.length === 0) {
+  if (modelStats.length === 0) {
     return (
       <div className={cn("analytics-section", className)}>
         <h3 className="text-lg font-semibold text-primary mb-4">Model Performance</h3>
@@ -44,7 +90,7 @@ export const ModelPerformance: React.FC<ModelPerformanceProps> = ({ className })
       </h3>
 
       <div className="space-y-4">
-        {data.models.map((model) => (
+        {modelStats.map((model) => (
           <div 
             key={model.model}
             className="bg-gray-800 border border-gray-700 rounded-lg p-4 hover:border-primary/50 transition-colors"
@@ -105,7 +151,7 @@ export const ModelPerformance: React.FC<ModelPerformanceProps> = ({ className })
                     'bg-green-500': model.model.includes('haiku'),
                   })}
                   style={{ 
-                    width: `${(model.stats.total_cost / Math.max(...data.models.map(m => m.stats.total_cost))) * 100}%` 
+                    width: `${(model.stats.total_cost / Math.max(...modelStats.map(m => m.stats.total_cost))) * 100}%` 
                   }}
                 />
               </div>
@@ -115,20 +161,22 @@ export const ModelPerformance: React.FC<ModelPerformanceProps> = ({ className })
       </div>
 
       {/* Summary insights */}
-      <div className="mt-4 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
-        <p className="text-xs text-gray-400">
-          💡 Most cost-effective: {
-            data.models.reduce((best, current) => 
-              current.stats.avg_cost_per_session < best.stats.avg_cost_per_session ? current : best
-            ).display_name
-          } • 
-          Best cache efficiency: {
-            data.models.reduce((best, current) => 
-              current.stats.cache_efficiency > best.stats.cache_efficiency ? current : best
-            ).display_name
-          }
-        </p>
-      </div>
+      {modelStats.length > 0 && (
+        <div className="mt-4 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+          <p className="text-xs text-gray-400">
+            💡 Most cost-effective: {
+              modelStats.reduce((best, current) => 
+                current.stats.avg_cost_per_session < best.stats.avg_cost_per_session ? current : best
+              ).display_name
+            } • 
+            Best cache efficiency: {
+              modelStats.reduce((best, current) => 
+                current.stats.cache_efficiency > best.stats.cache_efficiency ? current : best
+              ).display_name
+            }
+          </p>
+        </div>
+      )}
     </div>
   );
 };

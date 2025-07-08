@@ -1,29 +1,77 @@
-import React, { useState } from 'react';
-import { useCostAnalytics } from '../../hooks/useAnalytics';
+import React, { useMemo } from 'react';
+import { useAllSessions, useMetricsSummary } from '../../hooks/useSessionData';
 import { formatTokens, formatCost } from '../../utils/formatters';
 import { LoadingState } from '../Common/LoadingState';
 import { ErrorMessage } from '../Common/ErrorMessage';
 import { cn } from '../../utils/classNames';
+import { groupSessionsByProject } from '../../utils/projectHelpers';
 
 interface CostAnalyticsProps {
   className?: string;
 }
 
 export const CostAnalytics: React.FC<CostAnalyticsProps> = ({ className }) => {
-  const [groupBy, setGroupBy] = useState<'project' | 'model' | 'day'>('project');
-  const [days, setDays] = useState(30);
-  
-  const { data, isLoading, error } = useCostAnalytics(groupBy, days);
+  const { data: sessionsData, isLoading: sessionsLoading, error: sessionsError } = useAllSessions();
+  const { data: metricsData, isLoading: metricsLoading, error: metricsError } = useMetricsSummary();
 
-  if (isLoading) {
+  const costData = useMemo(() => {
+    if (!sessionsData?.sessions || !metricsData) return null;
+
+    const sessions = sessionsData.sessions;
+    const totalCost = metricsData.total_estimated_cost || 0;
+    
+    // Calculate cache savings (estimate: cache tokens save ~90% of cost)
+    let totalCacheTokens = 0;
+    let totalTokens = 0;
+    
+    sessions.forEach(session => {
+      totalCacheTokens += session.tokens_used.cache_creation_input_tokens + session.tokens_used.cache_read_input_tokens;
+      totalTokens += session.tokens_used.total_tokens;
+    });
+    
+    const cacheRatio = totalTokens > 0 ? totalCacheTokens / totalTokens : 0;
+    const cacheSavings = totalCost * cacheRatio * 0.9; // 90% savings on cached tokens
+
+    // Group by project
+    const projects = groupSessionsByProject(sessions);
+    const breakdown = projects.map(project => ({
+      name: project.name,
+      cost: project.totalCost,
+      tokens: {
+        total: project.totalTokens.total_tokens,
+        cached: project.totalTokens.cache_creation_input_tokens + project.totalTokens.cache_read_input_tokens,
+        fresh: project.totalTokens.total_tokens - (project.totalTokens.cache_creation_input_tokens + project.totalTokens.cache_read_input_tokens)
+      },
+      sessions: project.totalSessions,
+      percentage: totalCost > 0 ? project.totalCost / totalCost : 0
+    })).sort((a, b) => b.cost - a.cost);
+
+    // Calculate projections
+    const avgSessionsPerDay = metricsData.total_sessions / 30; // Assume 30 days
+    const avgCostPerSession = metricsData.total_sessions > 0 ? totalCost / metricsData.total_sessions : 0;
+    const dailyAverage = avgSessionsPerDay * avgCostPerSession;
+    const monthlyEstimate = dailyAverage * 30;
+
+    return {
+      total_cost: totalCost,
+      cache_savings: cacheSavings,
+      breakdown,
+      projection: {
+        daily_average: dailyAverage,
+        monthly_estimate: monthlyEstimate
+      }
+    };
+  }, [sessionsData, metricsData]);
+
+  if (sessionsLoading || metricsLoading) {
     return <LoadingState message="Loading cost analytics..." />;
   }
 
-  if (error) {
-    return <ErrorMessage title="Failed to load cost analytics" message={error.message} />;
+  if (sessionsError || metricsError) {
+    return <ErrorMessage title="Failed to load cost analytics" message={sessionsError?.message || metricsError?.message || 'Unknown error'} />;
   }
 
-  if (!data) {
+  if (!costData) {
     return (
       <div className={cn("analytics-section", className)}>
         <h3 className="text-lg font-semibold text-primary mb-4">Cost Analytics</h3>
@@ -45,26 +93,8 @@ export const CostAnalytics: React.FC<CostAnalyticsProps> = ({ className }) => {
           Cost Analytics
         </h3>
         
-        <div className="flex gap-2">
-          <select 
-            value={groupBy}
-            onChange={(e) => setGroupBy(e.target.value as any)}
-            className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white"
-          >
-            <option value="project">By Project</option>
-            <option value="model">By Model</option>
-            <option value="day">By Day</option>
-          </select>
-          
-          <select 
-            value={days}
-            onChange={(e) => setDays(Number(e.target.value))}
-            className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white"
-          >
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option>
-          </select>
+        <div className="text-xs text-gray-400">
+          Project cost breakdown
         </div>
       </div>
 
@@ -75,8 +105,8 @@ export const CostAnalytics: React.FC<CostAnalyticsProps> = ({ className }) => {
             <span className="text-xs text-gray-400">Total Cost</span>
             <span className="text-xs text-warning">⚡</span>
           </div>
-          <p className="text-2xl font-bold text-white">{formatCost(data.total_cost)}</p>
-          <p className="text-xs text-gray-400 mt-1">Last {days} days</p>
+          <p className="text-2xl font-bold text-white">{formatCost(costData.total_cost)}</p>
+          <p className="text-xs text-gray-400 mt-1">All time</p>
         </div>
         
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
@@ -84,9 +114,9 @@ export const CostAnalytics: React.FC<CostAnalyticsProps> = ({ className }) => {
             <span className="text-xs text-gray-400">Cache Savings</span>
             <span className="text-xs text-success">💚</span>
           </div>
-          <p className="text-2xl font-bold text-success">{formatCost(data.cache_savings)}</p>
+          <p className="text-2xl font-bold text-success">{formatCost(costData.cache_savings)}</p>
           <p className="text-xs text-gray-400 mt-1">
-            {((data.cache_savings / (data.total_cost + data.cache_savings)) * 100).toFixed(1)}% saved
+            {((costData.cache_savings / (costData.total_cost + costData.cache_savings)) * 100).toFixed(1)}% saved
           </p>
         </div>
         
@@ -95,9 +125,9 @@ export const CostAnalytics: React.FC<CostAnalyticsProps> = ({ className }) => {
             <span className="text-xs text-gray-400">Monthly Projection</span>
             <span className="text-xs text-blue-400">📈</span>
           </div>
-          <p className="text-2xl font-bold text-white">{formatCost(data.projection.monthly_estimate)}</p>
+          <p className="text-2xl font-bold text-white">{formatCost(costData.projection.monthly_estimate)}</p>
           <p className="text-xs text-gray-400 mt-1">
-            ${data.projection.daily_average.toFixed(2)}/day avg
+            ${costData.projection.daily_average.toFixed(2)}/day avg
           </p>
         </div>
       </div>
@@ -108,7 +138,7 @@ export const CostAnalytics: React.FC<CostAnalyticsProps> = ({ className }) => {
         
         {/* Visual bar */}
         <div className="h-8 bg-gray-700 rounded-full overflow-hidden mb-4 flex">
-          {data.breakdown.slice(0, 5).map((item, index) => (
+          {costData.breakdown.slice(0, 5).map((item, index) => (
             <div
               key={index}
               className={cn(getItemColor(index), "transition-all duration-300")}
@@ -116,11 +146,11 @@ export const CostAnalytics: React.FC<CostAnalyticsProps> = ({ className }) => {
               title={`${item.name}: ${(item.percentage * 100).toFixed(1)}%`}
             />
           ))}
-          {data.breakdown.length > 5 && (
+          {costData.breakdown.length > 5 && (
             <div
               className="bg-gray-600"
               style={{ 
-                width: `${data.breakdown.slice(5).reduce((sum, item) => sum + item.percentage, 0) * 100}%` 
+                width: `${costData.breakdown.slice(5).reduce((sum, item) => sum + item.percentage, 0) * 100}%` 
               }}
               title="Others"
             />
@@ -129,7 +159,7 @@ export const CostAnalytics: React.FC<CostAnalyticsProps> = ({ className }) => {
         
         {/* Detailed breakdown */}
         <div className="space-y-3">
-          {data.breakdown.slice(0, 5).map((item, index) => (
+          {costData.breakdown.slice(0, 5).map((item, index) => (
             <div key={index} className="flex items-center justify-between">
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <div className={cn("w-3 h-3 rounded-full flex-shrink-0", getItemColor(index))} />
@@ -150,9 +180,9 @@ export const CostAnalytics: React.FC<CostAnalyticsProps> = ({ className }) => {
             </div>
           ))}
           
-          {data.breakdown.length > 5 && (
+          {costData.breakdown.length > 5 && (
             <div className="text-xs text-gray-400 italic">
-              +{data.breakdown.length - 5} more items...
+              +{costData.breakdown.length - 5} more items...
             </div>
           )}
         </div>
@@ -162,8 +192,8 @@ export const CostAnalytics: React.FC<CostAnalyticsProps> = ({ className }) => {
           <div className="flex justify-between text-xs">
             <span className="text-gray-400">Cache Token Usage</span>
             <span className="text-white">
-              {data.breakdown.reduce((sum, item) => sum + item.tokens.cached, 0).toLocaleString()} / 
-              {data.breakdown.reduce((sum, item) => sum + item.tokens.total, 0).toLocaleString()} tokens
+              {costData.breakdown.reduce((sum, item) => sum + item.tokens.cached, 0).toLocaleString()} / 
+              {costData.breakdown.reduce((sum, item) => sum + item.tokens.total, 0).toLocaleString()} tokens
             </span>
           </div>
           <div className="mt-2 h-2 bg-gray-700 rounded-full overflow-hidden">
@@ -171,8 +201,8 @@ export const CostAnalytics: React.FC<CostAnalyticsProps> = ({ className }) => {
               className="h-full bg-success transition-all duration-500"
               style={{ 
                 width: `${(
-                  data.breakdown.reduce((sum, item) => sum + item.tokens.cached, 0) / 
-                  data.breakdown.reduce((sum, item) => sum + item.tokens.total, 0)
+                  costData.breakdown.reduce((sum, item) => sum + item.tokens.cached, 0) / 
+                  costData.breakdown.reduce((sum, item) => sum + item.tokens.total, 0)
                 ) * 100}%` 
               }}
             />
