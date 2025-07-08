@@ -211,3 +211,52 @@ type CostAnalyticsResponse struct {
 	Breakdown    []CostBreakdownEntry  `json:"breakdown" description:"Cost breakdown by group"`
 	Projection   CostProjection        `json:"projection" description:"Cost projections"`
 }
+
+// RecentFile represents a recently modified file
+// @Description Recently modified file information
+type RecentFile struct {
+	FilePath     string  `json:"file_path" example:"/src/app.ts" description:"Full path to the modified file"`
+	LastModified string  `json:"last_modified" example:"2023-01-01T10:00:00Z" description:"Last modification timestamp"`
+	SessionID    string  `json:"session_id" example:"session_123456" description:"ID of the session that modified the file"`
+	SessionTitle string  `json:"session_title" example:"Implement user authentication" description:"Title or task of the session"`
+	ProjectName  string  `json:"project_name" example:"my-app" description:"Name of the project"`
+	ProjectPath  string  `json:"project_path" example:"/Users/ksred/projects/my-app" description:"Full path to the project"`
+	ToolName     string  `json:"tool_name" example:"Edit" description:"Name of the tool used to modify the file"`
+	Occurrences  int     `json:"occurrences" example:"5" description:"Number of times this file was modified"`
+	GitBranch    *string `json:"git_branch,omitempty" example:"feature/auth" description:"Git branch where the file was modified"`
+}
+
+// RecentFilesResponse represents the response for recent files endpoint
+// @Description Response containing recently modified files
+type RecentFilesResponse struct {
+	Files  []RecentFile `json:"files" description:"List of recently modified files"`
+	Total  int          `json:"total" example:"150" description:"Total number of recent files"`
+	Limit  int          `json:"limit" example:"20" description:"Maximum number of files returned"`
+	Offset int          `json:"offset" example:"0" description:"Number of files skipped"`
+}
+
+// ProjectRecentFile represents a file modified within a specific project
+// @Description File modification information for a specific project
+type ProjectRecentFile struct {
+	FilePath           string                    `json:"file_path" example:"/src/app.ts" description:"Full path to the modified file"`
+	LastModified       string                    `json:"last_modified" example:"2023-01-01T10:00:00Z" description:"Last modification timestamp"`
+	Sessions           []ProjectRecentFileSession `json:"sessions" description:"Sessions that modified this file"`
+	ToolsUsed          []string                  `json:"tools_used" example:"[\"Edit\", \"Write\"]" description:"List of tools used to modify the file"`
+	TotalModifications int                       `json:"total_modifications" example:"8" description:"Total number of modifications"`
+}
+
+// ProjectRecentFileSession represents session info for a project recent file
+// @Description Session information for a file modification
+type ProjectRecentFileSession struct {
+	SessionID    string  `json:"session_id" example:"session_123456" description:"ID of the session"`
+	SessionTitle string  `json:"session_title" example:"Implement user authentication" description:"Title or task of the session"`
+	GitBranch    *string `json:"git_branch,omitempty" example:"feature/auth" description:"Git branch of the session"`
+}
+
+// ProjectRecentFilesResponse represents the response for project recent files endpoint
+// @Description Response containing recently modified files for a specific project
+type ProjectRecentFilesResponse struct {
+	ProjectName string              `json:"project_name" example:"my-app" description:"Name of the project"`
+	Files       []ProjectRecentFile `json:"files" description:"List of recently modified files in the project"`
+	Total       int                 `json:"total" example:"45" description:"Total number of recent files in the project"`
+}

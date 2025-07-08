@@ -163,6 +163,49 @@
                 }
             }
         },
+        "/files/recent": {
+            "get": {
+                "description": "Retrieve a list of files that were recently modified across all Claude sessions",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Files"
+                ],
+                "summary": "Get recently modified files",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of files to return (default: 20, max: 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Number of files to skip for pagination (default: 0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved recent files",
+                        "schema": {
+                            "$ref": "#/definitions/api.RecentFilesResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "Check the health status of the Claude Session Manager API",
@@ -273,6 +316,62 @@
                         "description": "Successfully retrieved usage statistics",
                         "schema": {
                             "$ref": "#/definitions/api.UsageStats"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/projects/{projectName}/files/recent": {
+            "get": {
+                "description": "Retrieve files that were recently modified within a specific project",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Projects"
+                ],
+                "summary": "Get project recent files",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Name of the project",
+                        "name": "projectName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of files to return (default: 20, max: 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by git branch name",
+                        "name": "branch",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved project recent files",
+                        "schema": {
+                            "$ref": "#/definitions/api.ProjectRecentFilesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - missing project name",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "500": {
@@ -783,6 +882,144 @@
                 "hour": {
                     "type": "integer",
                     "example": 14
+                }
+            }
+        },
+        "api.ProjectRecentFile": {
+            "description": "File modification information for a specific project",
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "example": "/src/app.ts"
+                },
+                "last_modified": {
+                    "type": "string",
+                    "example": "2023-01-01T10:00:00Z"
+                },
+                "sessions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.ProjectRecentFileSession"
+                    }
+                },
+                "tools_used": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"Edit\"",
+                        " \"Write\"]"
+                    ]
+                },
+                "total_modifications": {
+                    "type": "integer",
+                    "example": 8
+                }
+            }
+        },
+        "api.ProjectRecentFileSession": {
+            "description": "Session information for a file modification",
+            "type": "object",
+            "properties": {
+                "git_branch": {
+                    "type": "string",
+                    "example": "feature/auth"
+                },
+                "session_id": {
+                    "type": "string",
+                    "example": "session_123456"
+                },
+                "session_title": {
+                    "type": "string",
+                    "example": "Implement user authentication"
+                }
+            }
+        },
+        "api.ProjectRecentFilesResponse": {
+            "description": "Response containing recently modified files for a specific project",
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.ProjectRecentFile"
+                    }
+                },
+                "project_name": {
+                    "type": "string",
+                    "example": "my-app"
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 45
+                }
+            }
+        },
+        "api.RecentFile": {
+            "description": "Recently modified file information",
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "example": "/src/app.ts"
+                },
+                "git_branch": {
+                    "type": "string",
+                    "example": "feature/auth"
+                },
+                "last_modified": {
+                    "type": "string",
+                    "example": "2023-01-01T10:00:00Z"
+                },
+                "occurrences": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "project_name": {
+                    "type": "string",
+                    "example": "my-app"
+                },
+                "project_path": {
+                    "type": "string",
+                    "example": "/Users/ksred/projects/my-app"
+                },
+                "session_id": {
+                    "type": "string",
+                    "example": "session_123456"
+                },
+                "session_title": {
+                    "type": "string",
+                    "example": "Implement user authentication"
+                },
+                "tool_name": {
+                    "type": "string",
+                    "example": "Edit"
+                }
+            }
+        },
+        "api.RecentFilesResponse": {
+            "description": "Response containing recently modified files",
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.RecentFile"
+                    }
+                },
+                "limit": {
+                    "type": "integer",
+                    "example": 20
+                },
+                "offset": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 150
                 }
             }
         },

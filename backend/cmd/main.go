@@ -78,8 +78,11 @@ var serveCmd = &cobra.Command{
 			logrus.WithField("config_file", cfgFile).Info("Using custom config file")
 		}
 
-		// Create server with configuration
-		server := api.NewServer(appConfig)
+		// Create server with configuration (using SQLite)
+		server, err := api.NewSQLiteServer(appConfig)
+		if err != nil {
+			logrus.WithError(err).Fatal("Failed to create server")
+		}
 
 		// Setup graceful shutdown
 		ctx, cancel := context.WithCancel(context.Background())

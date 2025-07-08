@@ -202,6 +202,105 @@ definitions:
         example: 14
         type: integer
     type: object
+  api.ProjectRecentFile:
+    description: File modification information for a specific project
+    properties:
+      file_path:
+        example: /src/app.ts
+        type: string
+      last_modified:
+        example: "2023-01-01T10:00:00Z"
+        type: string
+      sessions:
+        items:
+          $ref: '#/definitions/api.ProjectRecentFileSession'
+        type: array
+      tools_used:
+        example:
+        - '["Edit"'
+        - ' "Write"]'
+        items:
+          type: string
+        type: array
+      total_modifications:
+        example: 8
+        type: integer
+    type: object
+  api.ProjectRecentFileSession:
+    description: Session information for a file modification
+    properties:
+      git_branch:
+        example: feature/auth
+        type: string
+      session_id:
+        example: session_123456
+        type: string
+      session_title:
+        example: Implement user authentication
+        type: string
+    type: object
+  api.ProjectRecentFilesResponse:
+    description: Response containing recently modified files for a specific project
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/api.ProjectRecentFile'
+        type: array
+      project_name:
+        example: my-app
+        type: string
+      total:
+        example: 45
+        type: integer
+    type: object
+  api.RecentFile:
+    description: Recently modified file information
+    properties:
+      file_path:
+        example: /src/app.ts
+        type: string
+      git_branch:
+        example: feature/auth
+        type: string
+      last_modified:
+        example: "2023-01-01T10:00:00Z"
+        type: string
+      occurrences:
+        example: 5
+        type: integer
+      project_name:
+        example: my-app
+        type: string
+      project_path:
+        example: /Users/ksred/projects/my-app
+        type: string
+      session_id:
+        example: session_123456
+        type: string
+      session_title:
+        example: Implement user authentication
+        type: string
+      tool_name:
+        example: Edit
+        type: string
+    type: object
+  api.RecentFilesResponse:
+    description: Response containing recently modified files
+    properties:
+      files:
+        items:
+          $ref: '#/definitions/api.RecentFile'
+        type: array
+      limit:
+        example: 20
+        type: integer
+      offset:
+        example: 0
+        type: integer
+      total:
+        example: 150
+        type: integer
+    type: object
   api.SearchResponse:
     description: Search results with query information
     properties:
@@ -517,6 +616,35 @@ paths:
       summary: Get time series analytics
       tags:
       - Analytics
+  /files/recent:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a list of files that were recently modified across all
+        Claude sessions
+      parameters:
+      - description: 'Maximum number of files to return (default: 20, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      - description: 'Number of files to skip for pagination (default: 0)'
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved recent files
+          schema:
+            $ref: '#/definitions/api.RecentFilesResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get recently modified files
+      tags:
+      - Files
   /health:
     get:
       consumes:
@@ -600,6 +728,43 @@ paths:
       summary: Get usage statistics
       tags:
       - Metrics
+  /projects/{projectName}/files/recent:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve files that were recently modified within a specific project
+      parameters:
+      - description: Name of the project
+        in: path
+        name: projectName
+        required: true
+        type: string
+      - description: 'Maximum number of files to return (default: 20, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      - description: Filter by git branch name
+        in: query
+        name: branch
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved project recent files
+          schema:
+            $ref: '#/definitions/api.ProjectRecentFilesResponse'
+        "400":
+          description: Bad request - missing project name
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get project recent files
+      tags:
+      - Projects
   /search:
     get:
       consumes:
