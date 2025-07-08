@@ -126,3 +126,88 @@ type WebSocketMessage struct {
 	Data      interface{} `json:"data,omitempty" description:"Message data"`
 	Timestamp time.Time   `json:"timestamp" example:"2023-01-01T10:00:00Z" description:"Message timestamp"`
 }
+
+// ModelStats represents statistics for a specific model
+// @Description Performance statistics for a Claude model
+type ModelStats struct {
+	TotalSessions          int     `json:"total_sessions" example:"45" description:"Total number of sessions using this model"`
+	TotalTokens            int     `json:"total_tokens" example:"1250000" description:"Total tokens consumed"`
+	TotalCost              float64 `json:"total_cost" example:"25.50" description:"Total cost in USD"`
+	AvgTokensPerSession    int     `json:"avg_tokens_per_session" example:"27777" description:"Average tokens per session"`
+	AvgCostPerSession      float64 `json:"avg_cost_per_session" example:"0.57" description:"Average cost per session"`
+	CacheEfficiency        float64 `json:"cache_efficiency" example:"0.45" description:"Ratio of cache tokens to total tokens"`
+	AvgSessionDurationSecs int64   `json:"avg_session_duration_seconds" example:"3600" description:"Average session duration in seconds"`
+}
+
+// ModelPerformanceEntry represents performance data for a single model
+// @Description Performance data for a Claude model with statistics
+type ModelPerformanceEntry struct {
+	Model       string     `json:"model" example:"claude-3-opus-20240229" description:"Model identifier"`
+	DisplayName string     `json:"display_name" example:"Claude 3 Opus" description:"Human-readable model name"`
+	Stats       ModelStats `json:"stats" description:"Performance statistics"`
+}
+
+// ModelPerformanceResponse represents the response for model performance comparison
+// @Description Model performance comparison data
+type ModelPerformanceResponse struct {
+	Models []ModelPerformanceEntry `json:"models" description:"List of models with their performance data"`
+}
+
+// TimeSeriesModelData represents model usage data within a time period
+// @Description Model usage data for a specific time period
+type TimeSeriesModelData struct {
+	Sessions int `json:"sessions" example:"3" description:"Number of sessions using this model"`
+	Tokens   int `json:"tokens" example:"75000" description:"Total tokens consumed"`
+}
+
+// TimeSeriesEntry represents data for a specific time period
+// @Description Analytics data for a specific time period
+type TimeSeriesEntry struct {
+	Date        string                         `json:"date" example:"2024-01-08" description:"Date in YYYY-MM-DD format"`
+	Sessions    int                            `json:"sessions" example:"12" description:"Number of sessions"`
+	Messages    int                            `json:"messages" example:"145" description:"Number of messages"`
+	TotalTokens int                            `json:"total_tokens" example:"125000" description:"Total tokens consumed"`
+	TotalCost   float64                        `json:"total_cost" example:"2.50" description:"Total cost in USD"`
+	Models      map[string]TimeSeriesModelData `json:"models" description:"Model usage breakdown"`
+}
+
+// TimeSeriesResponse represents the response for time series analytics
+// @Description Time series analytics data
+type TimeSeriesResponse struct {
+	Period string            `json:"period" example:"day" description:"Time period granularity" enums:"day,week,month"`
+	Data   []TimeSeriesEntry `json:"data" description:"Time series data entries"`
+}
+
+// TokenBreakdown represents detailed token usage
+// @Description Detailed token usage breakdown
+type TokenBreakdown struct {
+	Total  int `json:"total" example:"450000" description:"Total tokens"`
+	Cached int `json:"cached" example:"180000" description:"Cached tokens"`
+	Fresh  int `json:"fresh" example:"270000" description:"Fresh (non-cached) tokens"`
+}
+
+// CostBreakdownEntry represents cost data for a group
+// @Description Cost breakdown for a specific group (project, model, or day)
+type CostBreakdownEntry struct {
+	Name       string         `json:"name" example:"my-app" description:"Name of the group (project, model, or date)"`
+	Cost       float64        `json:"cost" example:"45.30" description:"Total cost in USD"`
+	Tokens     TokenBreakdown `json:"tokens" description:"Token usage breakdown"`
+	Sessions   int            `json:"sessions" example:"23" description:"Number of sessions"`
+	Percentage float64        `json:"percentage" example:"0.36" description:"Percentage of total cost"`
+}
+
+// CostProjection represents projected costs
+// @Description Projected cost estimates
+type CostProjection struct {
+	DailyAverage    float64 `json:"daily_average" example:"4.18" description:"Average daily cost"`
+	MonthlyEstimate float64 `json:"monthly_estimate" example:"125.40" description:"Estimated monthly cost"`
+}
+
+// CostAnalyticsResponse represents the response for cost analytics
+// @Description Cost analytics data with breakdown and projections
+type CostAnalyticsResponse struct {
+	TotalCost    float64               `json:"total_cost" example:"125.50" description:"Total cost in USD"`
+	CacheSavings float64               `json:"cache_savings" example:"35.20" description:"Estimated savings from cache hits in USD"`
+	Breakdown    []CostBreakdownEntry  `json:"breakdown" description:"Cost breakdown by group"`
+	Projection   CostProjection        `json:"projection" description:"Cost projections"`
+}
