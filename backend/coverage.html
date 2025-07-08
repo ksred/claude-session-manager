@@ -1,0 +1,2217 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>api: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/ksred/claude-session-manager/internal/api/handlers.go (7.1%)</option>
+				
+				<option value="file1">github.com/ksred/claude-session-manager/internal/api/middleware.go (0.0%)</option>
+				
+				<option value="file2">github.com/ksred/claude-session-manager/internal/api/routes.go (0.0%)</option>
+				
+				<option value="file3">github.com/ksred/claude-session-manager/internal/api/server.go (0.0%)</option>
+				
+				<option value="file4">github.com/ksred/claude-session-manager/internal/api/websocket.go (0.0%)</option>
+				
+				<option value="file5">github.com/ksred/claude-session-manager/internal/claude/parser.go (85.8%)</option>
+				
+				<option value="file6">github.com/ksred/claude-session-manager/internal/claude/session.go (98.4%)</option>
+				
+				<option value="file7">github.com/ksred/claude-session-manager/internal/claude/watcher.go (0.0%)</option>
+				
+				<option value="file8">github.com/ksred/claude-session-manager/internal/config/config.go (95.7%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package api
+
+import (
+        "net/http"
+        "sort"
+        "strconv"
+        "strings"
+        "time"
+
+        "github.com/gin-gonic/gin"
+        "github.com/ksred/claude-session-manager/internal/claude"
+)
+
+// This file contains HTTP handlers for the Claude Session Manager API.
+// All handlers include proper error handling, input validation, and logging.
+// Session data is retrieved from a cached copy that is automatically updated
+// when files change on disk.
+
+// SessionResponse represents the API response for a session
+type SessionResponse struct {
+        ID            string                `json:"id"`
+        Title         string                `json:"title"`
+        ProjectPath   string                `json:"project_path"`
+        ProjectName   string                `json:"project_name"`
+        GitBranch     string                `json:"git_branch,omitempty"`
+        GitWorktree   string                `json:"git_worktree,omitempty"`
+        Status        string                `json:"status"`
+        CreatedAt     time.Time             `json:"created_at"`
+        UpdatedAt     time.Time             `json:"updated_at"`
+        MessageCount  int                   `json:"message_count"`
+        CurrentTask   string                `json:"current_task"`
+        TokensUsed    claude.TokenUsage     `json:"tokens_used"`
+        FilesModified []string              `json:"files_modified"`
+        Duration      int64                 `json:"duration_seconds"`
+        IsActive      bool                  `json:"is_active"`
+        Model         string                `json:"model"` // Inferred from messages
+}
+
+// MetricsSummary represents overall metrics
+type MetricsSummary struct {
+        TotalSessions          int                  `json:"total_sessions"`
+        ActiveSessions         int                  `json:"active_sessions"`
+        TotalMessages          int                  `json:"total_messages"`
+        TotalTokensUsed        int                  `json:"total_tokens_used"`
+        TotalEstimatedCost     float64              `json:"total_estimated_cost"`
+        AverageSessionDuration float64              `json:"average_session_duration_minutes"`
+        MostUsedModel          string               `json:"most_used_model"`
+        ModelUsage             map[string]int       `json:"model_usage"`
+}
+
+// ActivityEntry represents a single activity in the timeline
+type ActivityEntry struct {
+        Timestamp   time.Time `json:"timestamp"`
+        Type        string    `json:"type"` // message_sent, session_created, session_updated, error
+        SessionID   string    `json:"session_id"`
+        SessionName string    `json:"session_name"`
+        Details     string    `json:"details"`
+}
+
+// Helper function to convert claude.Session to SessionResponse
+func sessionToResponse(session claude.Session) SessionResponse <span class="cov8" title="1">{
+        return SessionResponse{
+                ID:            session.ID,
+                Title:         session.CurrentTask,
+                ProjectPath:   session.ProjectPath,
+                ProjectName:   session.ProjectName,
+                GitBranch:     session.GitBranch,
+                GitWorktree:   session.GitWorktree,
+                Status:        session.Status.String(),
+                CreatedAt:     session.StartTime,
+                UpdatedAt:     session.LastActivity,
+                MessageCount:  session.GetMessageCount(),
+                CurrentTask:   session.CurrentTask,
+                TokensUsed:    session.TokensUsed,
+                FilesModified: session.FilesModified,
+                Duration:      int64(session.Duration().Seconds()),
+                IsActive:      session.IsActive(),
+                Model:         inferModelFromSession(session),
+        }
+}</span>
+
+// Helper function to infer model from session messages
+func inferModelFromSession(session claude.Session) string <span class="cov8" title="1">{
+        // Look for model information in messages metadata
+        for i := len(session.Messages) - 1; i &gt;= 0; i-- </span><span class="cov8" title="1">{
+                if model, ok := session.Messages[i].Meta["model"].(string); ok </span><span class="cov8" title="1">{
+                        return model
+                }</span>
+        }
+        <span class="cov8" title="1">return "claude-3-opus"</span> // Default assumption
+}
+
+// Helper function to sort sessions by last activity (most recent first)
+func sortSessionsByActivity(sessions []claude.Session) <span class="cov8" title="1">{
+        sort.Slice(sessions, func(i, j int) bool </span><span class="cov8" title="1">{
+                return sessions[i].LastActivity.After(sessions[j].LastActivity)
+        }</span>)
+}
+
+// Helper function to filter sessions by status
+func filterSessionsByStatus(sessions []claude.Session, statuses ...claude.SessionStatus) []claude.Session <span class="cov8" title="1">{
+        var filtered []claude.Session
+        statusMap := make(map[claude.SessionStatus]bool)
+        for _, status := range statuses </span><span class="cov8" title="1">{
+                statusMap[status] = true
+        }</span>
+        
+        <span class="cov8" title="1">for _, session := range sessions </span><span class="cov8" title="1">{
+                if statusMap[session.Status] </span><span class="cov8" title="1">{
+                        filtered = append(filtered, session)
+                }</span>
+        }
+        <span class="cov8" title="1">return filtered</span>
+}
+
+// getSessionsHandler returns all sessions
+func (s *Server) getSessionsHandler(c *gin.Context) <span class="cov0" title="0">{
+        sessions, err := s.getSessionsFromCache()
+        if err != nil </span><span class="cov0" title="0">{
+                s.logger.WithError(err).Error("Failed to get sessions")
+                c.JSON(http.StatusInternalServerError, gin.H{
+                        "error": "Failed to retrieve sessions",
+                })
+                return
+        }</span>
+
+        // Convert to response format
+        <span class="cov0" title="0">responses := make([]SessionResponse, len(sessions))
+        for i, session := range sessions </span><span class="cov0" title="0">{
+                responses[i] = sessionToResponse(session)
+        }</span>
+
+        // Sort by last activity
+        <span class="cov0" title="0">sort.Slice(responses, func(i, j int) bool </span><span class="cov0" title="0">{
+                return responses[i].UpdatedAt.After(responses[j].UpdatedAt)
+        }</span>)
+
+        <span class="cov0" title="0">c.JSON(http.StatusOK, gin.H{
+                "sessions": responses,
+                "total":    len(responses),
+        })</span>
+}
+
+// getSessionHandler returns a specific session by ID
+func (s *Server) getSessionHandler(c *gin.Context) <span class="cov0" title="0">{
+        sessionID := c.Param("id")
+
+        sessions, err := s.getSessionsFromCache()
+        if err != nil </span><span class="cov0" title="0">{
+                s.logger.WithError(err).Error("Failed to get sessions")
+                c.JSON(http.StatusInternalServerError, gin.H{
+                        "error": "Failed to retrieve sessions",
+                })
+                return
+        }</span>
+
+        // Find the specific session
+        <span class="cov0" title="0">for _, session := range sessions </span><span class="cov0" title="0">{
+                if session.ID == sessionID </span><span class="cov0" title="0">{
+                        c.JSON(http.StatusOK, sessionToResponse(session))
+                        return
+                }</span>
+        }
+
+        <span class="cov0" title="0">c.JSON(http.StatusNotFound, gin.H{
+                "error": "Session not found",
+        })</span>
+}
+
+// getActiveSessionsHandler returns currently active sessions
+func (s *Server) getActiveSessionsHandler(c *gin.Context) <span class="cov0" title="0">{
+        sessions, err := s.getSessionsFromCache()
+        if err != nil </span><span class="cov0" title="0">{
+                s.logger.WithError(err).Error("Failed to get sessions")
+                c.JSON(http.StatusInternalServerError, gin.H{
+                        "error": "Failed to retrieve sessions",
+                })
+                return
+        }</span>
+
+        // Filter for Working and Idle status
+        <span class="cov0" title="0">activeSessions := filterSessionsByStatus(sessions, claude.StatusWorking, claude.StatusIdle)
+
+        // Convert to response format
+        responses := make([]SessionResponse, len(activeSessions))
+        for i, session := range activeSessions </span><span class="cov0" title="0">{
+                responses[i] = sessionToResponse(session)
+        }</span>
+
+        // Sort by last activity
+        <span class="cov0" title="0">sort.Slice(responses, func(i, j int) bool </span><span class="cov0" title="0">{
+                return responses[i].UpdatedAt.After(responses[j].UpdatedAt)
+        }</span>)
+
+        <span class="cov0" title="0">c.JSON(http.StatusOK, gin.H{
+                "sessions": responses,
+                "total":    len(responses),
+        })</span>
+}
+
+// getRecentSessionsHandler returns recent sessions
+func (s *Server) getRecentSessionsHandler(c *gin.Context) <span class="cov0" title="0">{
+        limitStr := c.DefaultQuery("limit", "10")
+        limit, err := strconv.Atoi(limitStr)
+        if err != nil || limit &lt;= 0 </span><span class="cov0" title="0">{
+                limit = 10
+        }</span>
+        <span class="cov0" title="0">if limit &gt; 100 </span><span class="cov0" title="0">{
+                limit = 100 // Cap at 100 to prevent excessive response sizes
+        }</span>
+
+        <span class="cov0" title="0">sessions, err := s.getSessionsFromCache()
+        if err != nil </span><span class="cov0" title="0">{
+                s.logger.WithError(err).Error("Failed to get sessions")
+                c.JSON(http.StatusInternalServerError, gin.H{
+                        "error": "Failed to retrieve sessions",
+                })
+                return
+        }</span>
+
+        // Sort by last activity (most recent first)
+        <span class="cov0" title="0">sortSessionsByActivity(sessions)
+
+        // Apply limit
+        if limit &lt; len(sessions) </span><span class="cov0" title="0">{
+                sessions = sessions[:limit]
+        }</span>
+
+        // Convert to response format
+        <span class="cov0" title="0">responses := make([]SessionResponse, len(sessions))
+        for i, session := range sessions </span><span class="cov0" title="0">{
+                responses[i] = sessionToResponse(session)
+        }</span>
+
+        <span class="cov0" title="0">c.JSON(http.StatusOK, gin.H{
+                "sessions": responses,
+                "limit":    limit,
+        })</span>
+}
+
+// getMetricsSummaryHandler returns overall metrics summary
+func (s *Server) getMetricsSummaryHandler(c *gin.Context) <span class="cov0" title="0">{
+        sessions, err := s.getSessionsFromCache()
+        if err != nil </span><span class="cov0" title="0">{
+                s.logger.WithError(err).Error("Failed to get sessions")
+                c.JSON(http.StatusInternalServerError, gin.H{
+                        "error": "Failed to retrieve metrics",
+                })
+                return
+        }</span>
+
+        // Calculate metrics
+        <span class="cov0" title="0">totalMessages := 0
+        totalTokens := 0
+        totalCost := 0.0
+        totalDuration := time.Duration(0)
+        modelCount := make(map[string]int)
+        activeSessions := 0
+
+        for _, session := range sessions </span><span class="cov0" title="0">{
+                totalMessages += session.GetMessageCount()
+                totalTokens += session.TokensUsed.TotalTokens
+                totalCost += session.TokensUsed.EstimatedCost
+                totalDuration += session.Duration()
+                
+                if session.IsActive() </span><span class="cov0" title="0">{
+                        activeSessions++
+                }</span>
+                
+                // Count model usage
+                <span class="cov0" title="0">model := inferModelFromSession(session)
+                modelCount[model]++</span>
+        }
+
+        // Find most used model
+        <span class="cov0" title="0">mostUsedModel := "claude-3-opus"
+        maxCount := 0
+        for model, count := range modelCount </span><span class="cov0" title="0">{
+                if count &gt; maxCount </span><span class="cov0" title="0">{
+                        maxCount = count
+                        mostUsedModel = model
+                }</span>
+        }
+
+        // Calculate average session duration
+        <span class="cov0" title="0">avgDuration := 0.0
+        if len(sessions) &gt; 0 </span><span class="cov0" title="0">{
+                avgDuration = totalDuration.Minutes() / float64(len(sessions))
+        }</span>
+
+        <span class="cov0" title="0">summary := MetricsSummary{
+                TotalSessions:          len(sessions),
+                ActiveSessions:         activeSessions,
+                TotalMessages:          totalMessages,
+                TotalTokensUsed:        totalTokens,
+                TotalEstimatedCost:     totalCost,
+                AverageSessionDuration: avgDuration,
+                MostUsedModel:          mostUsedModel,
+                ModelUsage:             modelCount,
+        }
+
+        c.JSON(http.StatusOK, summary)</span>
+}
+
+// getActivityHandler returns activity timeline data
+func (s *Server) getActivityHandler(c *gin.Context) <span class="cov0" title="0">{
+        limitStr := c.DefaultQuery("limit", "50")
+        limit, err := strconv.Atoi(limitStr)
+        if err != nil || limit &lt;= 0 </span><span class="cov0" title="0">{
+                limit = 50
+        }</span>
+
+        <span class="cov0" title="0">sessions, err := s.getSessionsFromCache()
+        if err != nil </span><span class="cov0" title="0">{
+                s.logger.WithError(err).Error("Failed to get sessions")
+                c.JSON(http.StatusInternalServerError, gin.H{
+                        "error": "Failed to retrieve activity",
+                })
+                return
+        }</span>
+
+        // Create activity entries from recent messages and session events
+        <span class="cov0" title="0">var activities []ActivityEntry
+
+        for _, session := range sessions </span><span class="cov0" title="0">{
+                // Add session start activity
+                if !session.StartTime.IsZero() </span><span class="cov0" title="0">{
+                        activities = append(activities, ActivityEntry{
+                                Timestamp:   session.StartTime,
+                                Type:        "session_created",
+                                SessionID:   session.ID,
+                                SessionName: session.ProjectName,
+                                Details:     "Session started in " + session.ProjectName,
+                        })
+                }</span>
+
+                // Add recent message activities (last 3 messages per session)
+                <span class="cov0" title="0">messageCount := len(session.Messages)
+                startIdx := messageCount - 3
+                if startIdx &lt; 0 </span><span class="cov0" title="0">{
+                        startIdx = 0
+                }</span>
+
+                <span class="cov0" title="0">for i := startIdx; i &lt; messageCount; i++ </span><span class="cov0" title="0">{
+                        msg := session.Messages[i]
+                        activityType := "message_sent"
+                        details := "User sent a message"
+                        
+                        if msg.Role == "assistant" </span><span class="cov0" title="0">{
+                                details = "Assistant responded"
+                        }</span>
+                        
+                        <span class="cov0" title="0">if msg.Type == "error" </span><span class="cov0" title="0">{
+                                activityType = "error"
+                                details = "Error occurred"
+                        }</span>
+
+                        <span class="cov0" title="0">activities = append(activities, ActivityEntry{
+                                Timestamp:   msg.Timestamp,
+                                Type:        activityType,
+                                SessionID:   session.ID,
+                                SessionName: session.ProjectName,
+                                Details:     details,
+                        })</span>
+                }
+
+                // Add session update for recent activity
+                <span class="cov0" title="0">if session.TimeSinceLastActivity() &lt; 15*time.Minute </span><span class="cov0" title="0">{
+                        activities = append(activities, ActivityEntry{
+                                Timestamp:   session.LastActivity,
+                                Type:        "session_updated",
+                                SessionID:   session.ID,
+                                SessionName: session.ProjectName,
+                                Details:     "Session activity updated",
+                        })
+                }</span>
+        }
+
+        // Sort by timestamp (most recent first)
+        <span class="cov0" title="0">sort.Slice(activities, func(i, j int) bool </span><span class="cov0" title="0">{
+                return activities[i].Timestamp.After(activities[j].Timestamp)
+        }</span>)
+
+        // Apply limit
+        <span class="cov0" title="0">if limit &lt; len(activities) </span><span class="cov0" title="0">{
+                activities = activities[:limit]
+        }</span>
+
+        <span class="cov0" title="0">c.JSON(http.StatusOK, gin.H{
+                "activity": activities,
+                "total":    len(activities),
+        })</span>
+}
+
+// getUsageStatsHandler returns usage statistics
+func (s *Server) getUsageStatsHandler(c *gin.Context) <span class="cov0" title="0">{
+        sessions, err := s.getSessionsFromCache()
+        if err != nil </span><span class="cov0" title="0">{
+                s.logger.WithError(err).Error("Failed to get sessions")
+                c.JSON(http.StatusInternalServerError, gin.H{
+                        "error": "Failed to retrieve usage stats",
+                })
+                return
+        }</span>
+
+        // Calculate daily sessions for the last 7 days
+        <span class="cov0" title="0">dailySessions := make(map[string]int)
+        modelUsage := make(map[string]int)
+        hourlyActivity := make(map[int][]time.Time)
+
+        now := time.Now()
+        for i := 0; i &lt; 7; i++ </span><span class="cov0" title="0">{
+                date := now.AddDate(0, 0, -i).Format("2006-01-02")
+                dailySessions[date] = 0
+        }</span>
+
+        <span class="cov0" title="0">for _, session := range sessions </span><span class="cov0" title="0">{
+                // Count daily sessions
+                if !session.StartTime.IsZero() </span><span class="cov0" title="0">{
+                        date := session.StartTime.Format("2006-01-02")
+                        if _, exists := dailySessions[date]; exists </span><span class="cov0" title="0">{
+                                dailySessions[date]++
+                        }</span>
+                }
+
+                // Count model usage
+                <span class="cov0" title="0">model := inferModelFromSession(session)
+                modelUsage[model]++
+
+                // Track hourly activity
+                for _, msg := range session.Messages </span><span class="cov0" title="0">{
+                        hour := msg.Timestamp.Hour()
+                        hourlyActivity[hour] = append(hourlyActivity[hour], msg.Timestamp)
+                }</span>
+        }
+
+        // Format daily sessions
+        <span class="cov0" title="0">var dailySessionsList []gin.H
+        for i := 6; i &gt;= 0; i-- </span><span class="cov0" title="0">{
+                date := now.AddDate(0, 0, -i).Format("2006-01-02")
+                dailySessionsList = append(dailySessionsList, gin.H{
+                        "date":  date,
+                        "count": dailySessions[date],
+                })
+        }</span>
+
+        // Calculate peak hours
+        <span class="cov0" title="0">var peakHours []gin.H
+        for hour := 0; hour &lt; 24; hour++ </span><span class="cov0" title="0">{
+                if timestamps, exists := hourlyActivity[hour]; exists &amp;&amp; len(timestamps) &gt; 0 </span><span class="cov0" title="0">{
+                        // Calculate average sessions per day for this hour
+                        uniqueDays := make(map[string]bool)
+                        for _, ts := range timestamps </span><span class="cov0" title="0">{
+                                uniqueDays[ts.Format("2006-01-02")] = true
+                        }</span>
+                        <span class="cov0" title="0">avg := float64(len(timestamps)) / float64(len(uniqueDays))
+                        if avg &gt; 1.0 </span><span class="cov0" title="0">{ // Only include hours with significant activity
+                                peakHours = append(peakHours, gin.H{
+                                        "hour":             hour,
+                                        "average_sessions": avg,
+                                })
+                        }</span>
+                }
+        }
+
+        // Sort peak hours by average sessions
+        <span class="cov0" title="0">sort.Slice(peakHours, func(i, j int) bool </span><span class="cov0" title="0">{
+                return peakHours[i]["average_sessions"].(float64) &gt; peakHours[j]["average_sessions"].(float64)
+        }</span>)
+
+        // Limit to top 4 peak hours
+        <span class="cov0" title="0">if len(peakHours) &gt; 4 </span><span class="cov0" title="0">{
+                peakHours = peakHours[:4]
+        }</span>
+
+        <span class="cov0" title="0">stats := gin.H{
+                "daily_sessions": dailySessionsList,
+                "model_usage":    modelUsage,
+                "peak_hours":     peakHours,
+        }
+
+        c.JSON(http.StatusOK, stats)</span>
+}
+
+// searchHandler handles search queries across sessions
+func (s *Server) searchHandler(c *gin.Context) <span class="cov0" title="0">{
+        query := c.Query("q")
+        if query == "" </span><span class="cov0" title="0">{
+                c.JSON(http.StatusBadRequest, gin.H{
+                        "error": "Query parameter 'q' is required",
+                })
+                return
+        }</span>
+
+        // Validate query length
+        <span class="cov0" title="0">if len(query) &gt; 100 </span><span class="cov0" title="0">{
+                c.JSON(http.StatusBadRequest, gin.H{
+                        "error": "Query too long (max 100 characters)",
+                })
+                return
+        }</span>
+
+        <span class="cov0" title="0">sessions, err := s.getSessionsFromCache()
+        if err != nil </span><span class="cov0" title="0">{
+                s.logger.WithError(err).Error("Failed to get sessions")
+                c.JSON(http.StatusInternalServerError, gin.H{
+                        "error": "Failed to search sessions",
+                })
+                return
+        }</span>
+
+        // Search across project names, current tasks, and message content
+        <span class="cov0" title="0">queryLower := strings.ToLower(query)
+        var results []SessionResponse
+
+        for _, session := range sessions </span><span class="cov0" title="0">{
+                matched := false
+
+                // Search in project name
+                if strings.Contains(strings.ToLower(session.ProjectName), queryLower) </span><span class="cov0" title="0">{
+                        matched = true
+                }</span>
+
+                // Search in current task
+                <span class="cov0" title="0">if !matched &amp;&amp; strings.Contains(strings.ToLower(session.CurrentTask), queryLower) </span><span class="cov0" title="0">{
+                        matched = true
+                }</span>
+
+                // Search in recent messages (last 10)
+                <span class="cov0" title="0">if !matched </span><span class="cov0" title="0">{
+                        messageCount := len(session.Messages)
+                        startIdx := messageCount - 10
+                        if startIdx &lt; 0 </span><span class="cov0" title="0">{
+                                startIdx = 0
+                        }</span>
+
+                        <span class="cov0" title="0">for i := startIdx; i &lt; messageCount &amp;&amp; !matched; i++ </span><span class="cov0" title="0">{
+                                if strings.Contains(strings.ToLower(session.Messages[i].Content), queryLower) </span><span class="cov0" title="0">{
+                                        matched = true
+                                }</span>
+                        }
+                }
+
+                // Search in file paths modified
+                <span class="cov0" title="0">if !matched </span><span class="cov0" title="0">{
+                        for _, filePath := range session.FilesModified </span><span class="cov0" title="0">{
+                                if strings.Contains(strings.ToLower(filePath), queryLower) </span><span class="cov0" title="0">{
+                                        matched = true
+                                        break</span>
+                                }
+                        }
+                }
+
+                <span class="cov0" title="0">if matched </span><span class="cov0" title="0">{
+                        results = append(results, sessionToResponse(session))
+                }</span>
+        }
+
+        // Sort results by relevance (most recent first)
+        <span class="cov0" title="0">sort.Slice(results, func(i, j int) bool </span><span class="cov0" title="0">{
+                return results[i].UpdatedAt.After(results[j].UpdatedAt)
+        }</span>)
+
+        <span class="cov0" title="0">c.JSON(http.StatusOK, gin.H{
+                "query":   query,
+                "results": results,
+                "total":   len(results),
+        })</span>
+}</pre>
+		
+		<pre class="file" id="file1" style="display: none">package api
+
+import (
+        "fmt"
+        "strings"
+        "time"
+
+        "github.com/gin-gonic/gin"
+        "github.com/ksred/claude-session-manager/internal/config"
+        "github.com/sirupsen/logrus"
+)
+
+// CORSMiddleware returns a middleware function that handles CORS
+func CORSMiddleware(cfg *config.Config) gin.HandlerFunc <span class="cov0" title="0">{
+        return func(c *gin.Context) </span><span class="cov0" title="0">{
+                // Set allowed origins
+                origin := c.Request.Header.Get("Origin")
+                allowedOrigin := ""
+                
+                // Check if origin is allowed
+                for _, allowed := range cfg.Server.CORS.AllowedOrigins </span><span class="cov0" title="0">{
+                        if allowed == "*" || allowed == origin </span><span class="cov0" title="0">{
+                                allowedOrigin = allowed
+                                break</span>
+                        }
+                }
+                
+                <span class="cov0" title="0">if allowedOrigin != "" </span><span class="cov0" title="0">{
+                        c.Writer.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+                }</span>
+                
+                // Set credentials
+                <span class="cov0" title="0">if cfg.Server.CORS.AllowCredentials </span><span class="cov0" title="0">{
+                        c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+                }</span>
+                
+                // Set allowed headers
+                <span class="cov0" title="0">if len(cfg.Server.CORS.AllowedHeaders) &gt; 0 </span><span class="cov0" title="0">{
+                        c.Writer.Header().Set("Access-Control-Allow-Headers", strings.Join(cfg.Server.CORS.AllowedHeaders, ", "))
+                }</span>
+                
+                // Set allowed methods
+                <span class="cov0" title="0">if len(cfg.Server.CORS.AllowedMethods) &gt; 0 </span><span class="cov0" title="0">{
+                        c.Writer.Header().Set("Access-Control-Allow-Methods", strings.Join(cfg.Server.CORS.AllowedMethods, ", "))
+                }</span>
+                
+                // Set max age
+                <span class="cov0" title="0">if cfg.Server.CORS.MaxAge &gt; 0 </span><span class="cov0" title="0">{
+                        c.Writer.Header().Set("Access-Control-Max-Age", fmt.Sprintf("%d", cfg.Server.CORS.MaxAge))
+                }</span>
+
+                <span class="cov0" title="0">if c.Request.Method == "OPTIONS" </span><span class="cov0" title="0">{
+                        c.AbortWithStatus(204)
+                        return
+                }</span>
+
+                <span class="cov0" title="0">c.Next()</span>
+        }
+}
+
+// LoggingMiddleware returns a middleware function that logs requests
+func LoggingMiddleware(logger *logrus.Logger) gin.HandlerFunc <span class="cov0" title="0">{
+        return func(c *gin.Context) </span><span class="cov0" title="0">{
+                start := time.Now()
+                path := c.Request.URL.Path
+                raw := c.Request.URL.RawQuery
+
+                // Process request
+                c.Next()
+
+                // Calculate latency
+                latency := time.Since(start)
+
+                if raw != "" </span><span class="cov0" title="0">{
+                        path = path + "?" + raw
+                }</span>
+
+                // Log request details
+                <span class="cov0" title="0">entry := logger.WithFields(logrus.Fields{
+                        "status":     c.Writer.Status(),
+                        "method":     c.Request.Method,
+                        "path":       path,
+                        "ip":         c.ClientIP(),
+                        "latency":    latency,
+                        "user-agent": c.Request.UserAgent(),
+                })
+
+                if c.Writer.Status() &gt;= 500 </span><span class="cov0" title="0">{
+                        entry.Error("Server error")
+                }</span> else<span class="cov0" title="0"> if c.Writer.Status() &gt;= 400 </span><span class="cov0" title="0">{
+                        entry.Warn("Client error")
+                }</span> else<span class="cov0" title="0"> {
+                        entry.Info("Request processed")
+                }</span>
+        }
+}</pre>
+		
+		<pre class="file" id="file2" style="display: none">package api
+
+// setupRoutes configures all API routes
+func (s *Server) setupRoutes() <span class="cov0" title="0">{
+        // API v1 routes
+        v1 := s.router.Group("/api/v1")
+        </span><span class="cov0" title="0">{
+                // Health check
+                v1.GET("/health", s.healthHandler)
+
+                // Session routes
+                sessions := v1.Group("/sessions")
+                </span><span class="cov0" title="0">{
+                        sessions.GET("", s.getSessionsHandler)
+                        sessions.GET("/:id", s.getSessionHandler)
+                        sessions.GET("/active", s.getActiveSessionsHandler)
+                        sessions.GET("/recent", s.getRecentSessionsHandler)
+                }</span>
+
+                // Metrics routes
+                <span class="cov0" title="0">metrics := v1.Group("/metrics")
+                </span><span class="cov0" title="0">{
+                        metrics.GET("/summary", s.getMetricsSummaryHandler)
+                        metrics.GET("/activity", s.getActivityHandler)
+                        metrics.GET("/usage", s.getUsageStatsHandler)
+                }</span>
+
+                // Search routes
+                <span class="cov0" title="0">v1.GET("/search", s.searchHandler)
+
+                // WebSocket endpoint for real-time updates
+                v1.GET("/ws", s.websocketHandler)</span>
+        }
+
+        // Static files (if needed)
+        <span class="cov0" title="0">s.router.Static("/static", "./static")</span>
+}</pre>
+		
+		<pre class="file" id="file3" style="display: none">package api
+
+import (
+        "fmt"
+        "net/http"
+        "sync"
+        "time"
+
+        "github.com/gin-gonic/gin"
+        "github.com/ksred/claude-session-manager/internal/claude"
+        "github.com/ksred/claude-session-manager/internal/config"
+        "github.com/sirupsen/logrus"
+)
+
+// Server represents the API server
+type Server struct {
+        config         *config.Config
+        router         *gin.Engine
+        logger         *logrus.Logger
+        wsHub          *WebSocketHub
+        sessionsCache  []claude.Session
+        sessionsMutex  sync.RWMutex
+        sessionWatcher *claude.SessionWatcher
+}
+
+// NewServer creates a new API server instance
+func NewServer(cfg *config.Config) *Server <span class="cov0" title="0">{
+        // Set Gin mode based on debug setting
+        if cfg.Features.DebugMode </span><span class="cov0" title="0">{
+                gin.SetMode(gin.DebugMode)
+        }</span> else<span class="cov0" title="0"> {
+                gin.SetMode(gin.ReleaseMode)
+        }</span>
+
+        <span class="cov0" title="0">router := gin.New()
+        logger := logrus.StandardLogger()
+
+        // Create WebSocket hub if enabled
+        var wsHub *WebSocketHub
+        if cfg.Features.EnableWebSocket </span><span class="cov0" title="0">{
+                wsHub = NewWebSocketHub(logger)
+        }</span>
+
+        <span class="cov0" title="0">server := &amp;Server{
+                config:        cfg,
+                router:        router,
+                logger:        logger,
+                wsHub:         wsHub,
+                sessionsCache: []claude.Session{},
+        }
+
+        // Start WebSocket hub if enabled
+        if server.wsHub != nil </span><span class="cov0" title="0">{
+                go server.wsHub.Run()
+        }</span>
+
+        // Initialize sessions cache
+        <span class="cov0" title="0">if err := server.initializeSessionsCache(); err != nil </span><span class="cov0" title="0">{
+                logger.WithError(err).Error("Failed to initialize sessions cache")
+        }</span>
+
+        // Setup file watcher if enabled
+        <span class="cov0" title="0">if cfg.Features.EnableFileWatcher </span><span class="cov0" title="0">{
+                if err := server.setupFileWatcher(); err != nil </span><span class="cov0" title="0">{
+                        logger.WithError(err).Error("Failed to setup file watcher")
+                }</span>
+        }
+
+        // Start periodic cache refresh based on config
+        <span class="cov0" title="0">if cfg.Claude.CacheRefreshRate &gt; 0 </span><span class="cov0" title="0">{
+                refreshInterval := time.Duration(cfg.Claude.CacheRefreshRate) * time.Minute
+                go server.startPeriodicCacheRefresh(refreshInterval)
+        }</span>
+
+        // Setup middleware
+        <span class="cov0" title="0">server.setupMiddleware()
+
+        // Setup routes
+        server.setupRoutes()
+
+        return server</span>
+}
+
+// Start starts the server
+func (s *Server) Start() error <span class="cov0" title="0">{
+        addr := fmt.Sprintf("%s:%d", s.config.Server.Host, s.config.Server.Port)
+        s.logger.WithFields(logrus.Fields{
+                "address": addr,
+                "port":    s.config.Server.Port,
+                "host":    s.config.Server.Host,
+        }).Info("Starting server")
+
+        // Configure timeouts
+        server := &amp;http.Server{
+                Addr:         addr,
+                Handler:      s.router,
+                ReadTimeout:  time.Duration(s.config.Server.ReadTimeout) * time.Second,
+                WriteTimeout: time.Duration(s.config.Server.WriteTimeout) * time.Second,
+        }
+
+        return server.ListenAndServe()
+}</span>
+
+// setupMiddleware configures all middleware
+func (s *Server) setupMiddleware() <span class="cov0" title="0">{
+        // Recovery middleware
+        s.router.Use(gin.Recovery())
+
+        // CORS middleware if enabled
+        if s.config.Server.CORS.Enabled </span><span class="cov0" title="0">{
+                s.router.Use(CORSMiddleware(s.config))
+        }</span>
+
+        // Logging middleware
+        <span class="cov0" title="0">s.router.Use(LoggingMiddleware(s.logger))</span>
+}
+
+// Health check endpoint
+func (s *Server) healthHandler(c *gin.Context) <span class="cov0" title="0">{
+        c.JSON(http.StatusOK, gin.H{
+                "status": "healthy",
+                "service": "claude-session-manager",
+        })
+}</span>
+
+// initializeSessionsCache loads initial sessions into cache
+func (s *Server) initializeSessionsCache() error <span class="cov0" title="0">{
+        sessions, err := claude.DiscoverSessionsWithConfig(s.config)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov0" title="0">s.sessionsMutex.Lock()
+        s.sessionsCache = sessions
+        s.sessionsMutex.Unlock()
+
+        s.logger.WithField("session_count", len(sessions)).Info("Initialized sessions cache")
+        return nil</span>
+}
+
+// setupFileWatcher initializes the file system watcher for session files
+func (s *Server) setupFileWatcher() error <span class="cov0" title="0">{
+        watcher, err := claude.NewSessionWatcher(func(sessions []claude.Session) </span><span class="cov0" title="0">{
+                // Update cache when sessions change
+                s.sessionsMutex.Lock()
+                s.sessionsCache = sessions
+                s.sessionsMutex.Unlock()
+
+                s.logger.WithField("session_count", len(sessions)).Debug("Sessions cache updated")
+
+                // Broadcast update to all WebSocket clients if enabled
+                if s.wsHub != nil </span><span class="cov0" title="0">{
+                        s.wsHub.BroadcastUpdate("sessions_updated", gin.H{
+                                "total_sessions": len(sessions),
+                                "timestamp":      time.Now().Unix(),
+                        })
+                }</span>
+        })
+
+        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        // Set event callback for individual file events
+        <span class="cov0" title="0">watcher.SetEventCallback(func(event claude.WatchEvent) </span><span class="cov0" title="0">{
+                s.logger.WithFields(logrus.Fields{
+                        "event_type": event.Type,
+                        "session_id": event.SessionID,
+                }).Debug("Session file event")
+
+                // Broadcast specific event to WebSocket clients
+                messageType := ""
+                switch event.Type </span>{
+                case "created":<span class="cov0" title="0">
+                        messageType = "session_new"</span>
+                case "modified":<span class="cov0" title="0">
+                        messageType = "session_update"</span>
+                case "deleted":<span class="cov0" title="0">
+                        messageType = "session_deleted"</span>
+                }
+
+                <span class="cov0" title="0">if messageType != "" &amp;&amp; s.wsHub != nil </span><span class="cov0" title="0">{
+                        data := gin.H{
+                                "session_id": event.SessionID,
+                                "timestamp":  event.Timestamp.Unix(),
+                        }
+
+                        // Include session data for new/update events
+                        if event.Session != nil </span><span class="cov0" title="0">{
+                                data["session"] = sessionToResponse(*event.Session)
+                        }</span>
+
+                        <span class="cov0" title="0">s.wsHub.BroadcastUpdate(messageType, data)</span>
+                }
+        })
+
+        <span class="cov0" title="0">s.sessionWatcher = watcher
+        return watcher.Start()</span>
+}
+
+// startPeriodicCacheRefresh refreshes the cache periodically as a backup
+func (s *Server) startPeriodicCacheRefresh(interval time.Duration) <span class="cov0" title="0">{
+        ticker := time.NewTicker(interval)
+        defer ticker.Stop()
+
+        for range ticker.C </span><span class="cov0" title="0">{
+                if err := s.initializeSessionsCache(); err != nil </span><span class="cov0" title="0">{
+                        s.logger.WithError(err).Error("Failed to refresh sessions cache")
+                }</span>
+        }
+}
+
+// getSessionsFromCache returns sessions from cache
+func (s *Server) getSessionsFromCache() ([]claude.Session, error) <span class="cov0" title="0">{
+        s.sessionsMutex.RLock()
+        defer s.sessionsMutex.RUnlock()
+
+        // Make a copy to avoid race conditions
+        sessions := make([]claude.Session, len(s.sessionsCache))
+        copy(sessions, s.sessionsCache)
+
+        return sessions, nil
+}</span>
+
+// Stop gracefully stops the server
+func (s *Server) Stop() error <span class="cov0" title="0">{
+        if s.sessionWatcher != nil </span><span class="cov0" title="0">{
+                return s.sessionWatcher.Stop()
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}</pre>
+		
+		<pre class="file" id="file4" style="display: none">package api
+
+import (
+        "encoding/json"
+        "fmt"
+        "net/http"
+        "time"
+
+        "github.com/gin-gonic/gin"
+        "github.com/gorilla/websocket"
+        "github.com/sirupsen/logrus"
+)
+
+var upgrader = websocket.Upgrader{
+        ReadBufferSize:  1024,
+        WriteBufferSize: 1024,
+        CheckOrigin: func(r *http.Request) bool <span class="cov0" title="0">{
+                // Allow all origins for development
+                // TODO: Restrict origins in production
+                return true
+        }</span>,
+}
+
+// WebSocketClient represents a connected WebSocket client
+type WebSocketClient struct {
+        ID     string
+        Conn   *websocket.Conn
+        Send   chan []byte
+        Hub    *WebSocketHub
+        Logger *logrus.Logger
+}
+
+// WebSocketHub maintains active WebSocket connections
+type WebSocketHub struct {
+        clients    map[*WebSocketClient]bool
+        broadcast  chan []byte
+        register   chan *WebSocketClient
+        unregister chan *WebSocketClient
+        logger     *logrus.Logger
+}
+
+// NewWebSocketHub creates a new WebSocket hub
+func NewWebSocketHub(logger *logrus.Logger) *WebSocketHub <span class="cov0" title="0">{
+        return &amp;WebSocketHub{
+                clients:    make(map[*WebSocketClient]bool),
+                broadcast:  make(chan []byte),
+                register:   make(chan *WebSocketClient),
+                unregister: make(chan *WebSocketClient),
+                logger:     logger,
+        }
+}</span>
+
+// Run starts the WebSocket hub
+func (h *WebSocketHub) Run() <span class="cov0" title="0">{
+        for </span><span class="cov0" title="0">{
+                select </span>{
+                case client := &lt;-h.register:<span class="cov0" title="0">
+                        h.clients[client] = true
+                        h.logger.WithField("client_id", client.ID).Info("WebSocket client connected")</span>
+
+                case client := &lt;-h.unregister:<span class="cov0" title="0">
+                        if _, ok := h.clients[client]; ok </span><span class="cov0" title="0">{
+                                delete(h.clients, client)
+                                close(client.Send)
+                                h.logger.WithField("client_id", client.ID).Info("WebSocket client disconnected")
+                        }</span>
+
+                case message := &lt;-h.broadcast:<span class="cov0" title="0">
+                        for client := range h.clients </span><span class="cov0" title="0">{
+                                select </span>{
+                                case client.Send &lt;- message:<span class="cov0" title="0"></span>
+                                default:<span class="cov0" title="0">
+                                        close(client.Send)
+                                        delete(h.clients, client)</span>
+                                }
+                        }
+                }
+        }
+}
+
+// BroadcastUpdate sends an update to all connected clients
+// Supported update types:
+// - "sessions_updated": Full sessions list has been updated
+// - "session_new": A new session was created
+// - "session_update": An existing session was modified
+// - "session_deleted": A session was deleted
+func (h *WebSocketHub) BroadcastUpdate(updateType string, data interface{}) <span class="cov0" title="0">{
+        message := gin.H{
+                "type":      updateType,
+                "data":      data,
+                "timestamp": time.Now().Unix(),
+        }
+
+        // Convert to JSON
+        jsonData, err := json.Marshal(message)
+        if err != nil </span><span class="cov0" title="0">{
+                h.logger.WithError(err).Error("Failed to marshal WebSocket message")
+                return
+        }</span>
+
+        <span class="cov0" title="0">h.broadcast &lt;- jsonData</span>
+}
+
+// websocketHandler handles WebSocket connections
+func (s *Server) websocketHandler(c *gin.Context) <span class="cov0" title="0">{
+        // Upgrade HTTP connection to WebSocket
+        conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+        if err != nil </span><span class="cov0" title="0">{
+                s.logger.WithError(err).Error("Failed to upgrade to WebSocket")
+                return
+        }</span>
+
+        // Create new client
+        <span class="cov0" title="0">client := &amp;WebSocketClient{
+                ID:     generateClientID(),
+                Conn:   conn,
+                Send:   make(chan []byte, 256),
+                Hub:    s.wsHub, // Assuming wsHub is added to Server struct
+                Logger: s.logger,
+        }
+
+        // Register client
+        client.Hub.register &lt;- client
+
+        // Start goroutines for reading and writing
+        go client.writePump()
+        go client.readPump()</span>
+}
+
+// readPump handles incoming messages from the WebSocket client
+func (c *WebSocketClient) readPump() <span class="cov0" title="0">{
+        defer func() </span><span class="cov0" title="0">{
+                c.Hub.unregister &lt;- c
+                c.Conn.Close()
+        }</span>()
+
+        <span class="cov0" title="0">c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+        c.Conn.SetPongHandler(func(string) error </span><span class="cov0" title="0">{
+                c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+                return nil
+        }</span>)
+
+        <span class="cov0" title="0">for </span><span class="cov0" title="0">{
+                _, message, err := c.Conn.ReadMessage()
+                if err != nil </span><span class="cov0" title="0">{
+                        if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) </span><span class="cov0" title="0">{
+                                c.Logger.WithError(err).Error("WebSocket error")
+                        }</span>
+                        <span class="cov0" title="0">break</span>
+                }
+
+                // Handle incoming message
+                <span class="cov0" title="0">c.Logger.WithField("message", string(message)).Debug("Received WebSocket message")
+                
+                // Process incoming messages
+                var msg map[string]interface{}
+                if err := json.Unmarshal(message, &amp;msg); err != nil </span><span class="cov0" title="0">{
+                        c.Logger.WithError(err).Error("Failed to parse WebSocket message")
+                        continue</span>
+                }
+
+                // Handle different message types
+                <span class="cov0" title="0">if msgType, ok := msg["type"].(string); ok </span><span class="cov0" title="0">{
+                        switch msgType </span>{
+                        case "ping":<span class="cov0" title="0">
+                                // Respond with pong
+                                pong := gin.H{"type": "pong", "timestamp": time.Now().Unix()}
+                                if pongData, err := json.Marshal(pong); err == nil </span><span class="cov0" title="0">{
+                                        c.Send &lt;- pongData
+                                }</span>
+                        case "subscribe":<span class="cov0" title="0">
+                                // Handle subscription requests
+                                c.Logger.WithField("subscription", msg).Info("Client subscribed to updates")
+                                // Send acknowledgment
+                                ack := gin.H{"type": "subscribed", "timestamp": time.Now().Unix()}
+                                if ackData, err := json.Marshal(ack); err == nil </span><span class="cov0" title="0">{
+                                        c.Send &lt;- ackData
+                                }</span>
+                        default:<span class="cov0" title="0">
+                                c.Logger.WithField("type", msgType).Debug("Received unknown message type")</span>
+                        }
+                }
+        }
+}
+
+// writePump handles sending messages to the WebSocket client
+func (c *WebSocketClient) writePump() <span class="cov0" title="0">{
+        ticker := time.NewTicker(54 * time.Second)
+        defer func() </span><span class="cov0" title="0">{
+                ticker.Stop()
+                c.Conn.Close()
+        }</span>()
+
+        <span class="cov0" title="0">for </span><span class="cov0" title="0">{
+                select </span>{
+                case message, ok := &lt;-c.Send:<span class="cov0" title="0">
+                        c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+                        if !ok </span><span class="cov0" title="0">{
+                                c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+                                return
+                        }</span>
+
+                        <span class="cov0" title="0">w, err := c.Conn.NextWriter(websocket.TextMessage)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return
+                        }</span>
+                        <span class="cov0" title="0">w.Write(message)
+
+                        // Add queued messages to the current websocket message
+                        n := len(c.Send)
+                        for i := 0; i &lt; n; i++ </span><span class="cov0" title="0">{
+                                w.Write([]byte{'\n'})
+                                w.Write(&lt;-c.Send)
+                        }</span>
+
+                        <span class="cov0" title="0">if err := w.Close(); err != nil </span><span class="cov0" title="0">{
+                                return
+                        }</span>
+
+                case &lt;-ticker.C:<span class="cov0" title="0">
+                        c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+                        if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil </span><span class="cov0" title="0">{
+                                return
+                        }</span>
+                }
+        }
+}
+
+// generateClientID generates a unique client ID
+func generateClientID() string <span class="cov0" title="0">{
+        return fmt.Sprintf("client-%d", time.Now().UnixNano())
+}</pre>
+		
+		<pre class="file" id="file5" style="display: none">package claude
+
+import (
+        "bufio"
+        "encoding/json"
+        "fmt"
+        "net/url"
+        "os"
+        "os/exec"
+        "path/filepath"
+        "strings"
+        "time"
+
+        "github.com/ksred/claude-session-manager/internal/config"
+)
+
+// DiscoverSessions scans the Claude projects directory for active sessions
+func DiscoverSessions() ([]Session, error) <span class="cov0" title="0">{
+        // Use default configuration
+        cfg := config.DefaultConfig()
+        return DiscoverSessionsWithConfig(cfg)
+}</span>
+
+// DiscoverSessionsWithConfig scans the Claude projects directory for active sessions using provided config
+func DiscoverSessionsWithConfig(cfg *config.Config) ([]Session, error) <span class="cov8" title="1">{
+        claudeDir := cfg.Claude.ProjectsPath
+        
+        // Check if the Claude directory exists
+        if _, err := os.Stat(claudeDir); os.IsNotExist(err) </span><span class="cov8" title="1">{
+                return []Session{}, nil // Return empty list if directory doesn't exist
+        }</span>
+        
+        <span class="cov8" title="1">var sessions []Session
+        
+        err := filepath.Walk(claudeDir, func(path string, info os.FileInfo, err error) error </span><span class="cov8" title="1">{
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil // Skip files we can't read
+                }</span>
+                
+                // Look for .jsonl files that are not summary files
+                <span class="cov8" title="1">if strings.HasSuffix(path, ".jsonl") &amp;&amp; !strings.Contains(path, "summary") </span><span class="cov8" title="1">{
+                        session, err := ParseSessionFile(path)
+                        if err == nil </span><span class="cov8" title="1">{
+                                sessions = append(sessions, session)
+                        }</span>
+                }
+                <span class="cov8" title="1">return nil</span>
+        })
+        
+        <span class="cov8" title="1">return sessions, err</span>
+}
+
+// ParseSessionFile reads and parses a Claude session .jsonl file
+func ParseSessionFile(filePath string) (Session, error) <span class="cov8" title="1">{
+        file, err := os.Open(filePath)
+        if err != nil </span><span class="cov8" title="1">{
+                return Session{}, fmt.Errorf("failed to open file %s: %w", filePath, err)
+        }</span>
+        <span class="cov8" title="1">defer file.Close()
+        
+        var session Session
+        session.FilePath = filePath
+        session.ID = extractSessionID(filePath)
+        session.ProjectPath = extractProjectPath(filePath)
+        session.ProjectName = extractProjectName(session.ProjectPath)
+        
+        scanner := bufio.NewScanner(file)
+        lineCount := 0
+        
+        for scanner.Scan() </span><span class="cov8" title="1">{
+                lineCount++
+                var message Message
+                line := scanner.Bytes()
+                
+                if err := json.Unmarshal(line, &amp;message); err != nil </span><span class="cov8" title="1">{
+                        // Skip malformed lines but continue parsing
+                        continue</span>
+                }
+                
+                // Parse timestamp if it's a string
+                <span class="cov8" title="1">if message.Timestamp.IsZero() </span><span class="cov8" title="1">{
+                        // Try multiple timestamp fields and formats
+                        timestampFields := []string{"timestamp", "created_at", "created", "time"}
+                        timeFormats := []string{
+                                time.RFC3339,
+                                time.RFC3339Nano,
+                                "2006-01-02T15:04:05.999999999Z07:00",
+                                "2006-01-02T15:04:05Z",
+                        }
+                        
+                        for _, field := range timestampFields </span><span class="cov8" title="1">{
+                                if tsStr, ok := message.Meta[field].(string); ok </span><span class="cov8" title="1">{
+                                        for _, format := range timeFormats </span><span class="cov8" title="1">{
+                                                if ts, err := time.Parse(format, tsStr); err == nil </span><span class="cov8" title="1">{
+                                                        message.Timestamp = ts
+                                                        break</span>
+                                                }
+                                        }
+                                        <span class="cov8" title="1">if !message.Timestamp.IsZero() </span><span class="cov8" title="1">{
+                                                break</span>
+                                        }
+                                }
+                        }
+                        
+                        // If still no timestamp, use current time
+                        <span class="cov8" title="1">if message.Timestamp.IsZero() </span><span class="cov8" title="1">{
+                                message.Timestamp = time.Now()
+                        }</span>
+                }
+                
+                <span class="cov8" title="1">session.Messages = append(session.Messages, message)
+                updateSessionMetrics(&amp;session, message)</span>
+        }
+        
+        // Set session timing information
+        <span class="cov8" title="1">if len(session.Messages) &gt; 0 </span><span class="cov8" title="1">{
+                session.StartTime = session.Messages[0].Timestamp
+                session.LastActivity = session.Messages[len(session.Messages)-1].Timestamp
+        }</span>
+        
+        // Extract git information
+        <span class="cov8" title="1">if session.ProjectPath != "" </span><span class="cov8" title="1">{
+                session.GitBranch = extractGitBranch(session.ProjectPath)
+                session.GitWorktree = extractGitWorktree(session.ProjectPath)
+        }</span>
+        
+        // Determine current task from recent messages
+        <span class="cov8" title="1">session.CurrentTask = extractCurrentTask(session.Messages)
+        
+        // Update session status based on activity and content
+        session.UpdateStatus()
+        
+        return session, scanner.Err()</span>
+}
+
+// extractSessionID extracts the session UUID from the file path
+func extractSessionID(filePath string) string <span class="cov8" title="1">{
+        fileName := filepath.Base(filePath)
+        return strings.TrimSuffix(fileName, ".jsonl")
+}</span>
+
+// extractProjectPath decodes the project path from the directory structure
+func extractProjectPath(filePath string) string <span class="cov8" title="1">{
+        dir := filepath.Dir(filePath)
+        parts := strings.Split(dir, string(filepath.Separator))
+        
+        // Find the "projects" directory and take the next part
+        for i, part := range parts </span><span class="cov8" title="1">{
+                if part == "projects" &amp;&amp; i+1 &lt; len(parts) </span><span class="cov8" title="1">{
+                        // Properly decode the URL-encoded path
+                        encodedPath := parts[i+1]
+                        decodedPath, err := url.QueryUnescape(encodedPath)
+                        if err != nil </span><span class="cov0" title="0">{
+                                // Fallback to simple replacement if proper decoding fails
+                                decodedPath = strings.ReplaceAll(encodedPath, "%2F", "/")
+                                decodedPath = strings.ReplaceAll(decodedPath, "%20", " ")
+                        }</span>
+                        <span class="cov8" title="1">return decodedPath</span>
+                }
+        }
+        <span class="cov8" title="1">return ""</span>
+}
+
+// extractProjectName gets a display name from the project path
+func extractProjectName(projectPath string) string <span class="cov8" title="1">{
+        if projectPath == "" </span><span class="cov8" title="1">{
+                return "Unknown Project"
+        }</span>
+        <span class="cov8" title="1">return filepath.Base(projectPath)</span>
+}
+
+// extractCurrentTask attempts to determine what the session is currently working on
+func extractCurrentTask(messages []Message) string <span class="cov8" title="1">{
+        if len(messages) == 0 </span><span class="cov8" title="1">{
+                return "No activity"
+        }</span>
+        
+        // Look at the last few user messages for context
+        <span class="cov8" title="1">for i := len(messages) - 1; i &gt;= 0 &amp;&amp; i &gt;= len(messages)-5; i-- </span><span class="cov8" title="1">{
+                msg := messages[i]
+                if msg.Role == "user" &amp;&amp; len(msg.Content) &gt; 10 </span><span class="cov8" title="1">{
+                        // Clean up the task description
+                        task := strings.TrimSpace(msg.Content)
+                        
+                        // Remove newlines and extra spaces
+                        task = strings.ReplaceAll(task, "\n", " ")
+                        task = strings.Join(strings.Fields(task), " ")
+                        
+                        // Truncate long messages
+                        if len(task) &gt; 80 </span><span class="cov8" title="1">{
+                                task = task[:77] + "..."
+                        }</span>
+                        <span class="cov8" title="1">return task</span>
+                }
+        }
+        
+        <span class="cov8" title="1">return "Session active"</span>
+}
+
+// updateSessionMetrics updates token usage and other metrics from a message
+func updateSessionMetrics(session *Session, message Message) <span class="cov8" title="1">{
+        // Accumulate token usage
+        session.TokensUsed.InputTokens += message.Usage.InputTokens
+        session.TokensUsed.OutputTokens += message.Usage.OutputTokens
+        
+        // Update totals and recalculate cost
+        session.TokensUsed.UpdateTotals()
+        
+        // Extract file modifications from tool uses
+        if tools, ok := message.Meta["tools"].([]interface{}); ok </span><span class="cov8" title="1">{
+                for _, tool := range tools </span><span class="cov8" title="1">{
+                        if toolMap, ok := tool.(map[string]interface{}); ok </span><span class="cov8" title="1">{
+                                if toolType, ok := toolMap["type"].(string); ok </span><span class="cov8" title="1">{
+                                        if toolType == "edit" || toolType == "write" || toolType == "multiedit" </span><span class="cov8" title="1">{
+                                                if params, ok := toolMap["parameters"].(map[string]interface{}); ok </span><span class="cov8" title="1">{
+                                                        if filePath, ok := params["file_path"].(string); ok </span><span class="cov8" title="1">{
+                                                                // Add to files modified if not already present
+                                                                found := false
+                                                                for _, existing := range session.FilesModified </span><span class="cov0" title="0">{
+                                                                        if existing == filePath </span><span class="cov0" title="0">{
+                                                                                found = true
+                                                                                break</span>
+                                                                        }
+                                                                }
+                                                                <span class="cov8" title="1">if !found </span><span class="cov8" title="1">{
+                                                                        session.FilesModified = append(session.FilesModified, filePath)
+                                                                }</span>
+                                                        }
+                                                }
+                                        }
+                                }
+                        }
+                }
+        }
+}
+
+// extractGitBranch gets the current git branch for the project
+func extractGitBranch(projectPath string) string <span class="cov8" title="1">{
+        // First check if the directory exists and is accessible
+        if _, err := os.Stat(projectPath); err != nil </span><span class="cov8" title="1">{
+                return ""
+        }</span>
+        
+        // Check if it's a git repository
+        <span class="cov8" title="1">gitDir := filepath.Join(projectPath, ".git")
+        if _, err := os.Stat(gitDir); err != nil </span><span class="cov8" title="1">{
+                return ""
+        }</span>
+        
+        <span class="cov0" title="0">cmd := exec.Command("git", "branch", "--show-current")
+        cmd.Dir = projectPath
+        output, err := cmd.Output()
+        if err != nil </span><span class="cov0" title="0">{
+                // Try alternative command for older git versions
+                cmd = exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+                cmd.Dir = projectPath
+                output, err = cmd.Output()
+                if err != nil </span><span class="cov0" title="0">{
+                        return ""
+                }</span>
+        }
+        <span class="cov0" title="0">return strings.TrimSpace(string(output))</span>
+}
+
+// extractGitWorktree determines if the project is a git worktree
+func extractGitWorktree(projectPath string) string <span class="cov8" title="1">{
+        // Check if this is a worktree by looking for .git file (not directory)
+        gitPath := filepath.Join(projectPath, ".git")
+        info, err := os.Stat(gitPath)
+        if err != nil </span><span class="cov8" title="1">{
+                return ""
+        }</span>
+        
+        // If .git is a file, it's likely a worktree
+        <span class="cov8" title="1">if !info.IsDir() </span><span class="cov8" title="1">{
+                // Read the .git file to get the actual git directory
+                content, err := os.ReadFile(gitPath)
+                if err != nil </span><span class="cov0" title="0">{
+                        return ""
+                }</span>
+                
+                // Parse the gitdir line
+                <span class="cov8" title="1">lines := strings.Split(string(content), "\n")
+                for _, line := range lines </span><span class="cov8" title="1">{
+                        if strings.HasPrefix(line, "gitdir:") </span><span class="cov8" title="1">{
+                                gitDir := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
+                                // Extract the worktree name from the path
+                                if strings.Contains(gitDir, ".git/worktrees/") </span><span class="cov8" title="1">{
+                                        parts := strings.Split(gitDir, "/")
+                                        for i, part := range parts </span><span class="cov8" title="1">{
+                                                if part == "worktrees" &amp;&amp; i+1 &lt; len(parts) </span><span class="cov8" title="1">{
+                                                        return parts[i+1]
+                                                }</span>
+                                        }
+                                }
+                        }
+                }
+        }
+        
+        <span class="cov8" title="1">return ""</span>
+}</pre>
+		
+		<pre class="file" id="file6" style="display: none">package claude
+
+import (
+        "time"
+)
+
+// SessionStatus represents the current state of a Claude session
+type SessionStatus int
+
+const (
+        StatusWorking SessionStatus = iota
+        StatusIdle
+        StatusComplete
+        StatusError
+)
+
+func (s SessionStatus) String() string <span class="cov8" title="1">{
+        switch s </span>{
+        case StatusWorking:<span class="cov8" title="1">
+                return "Working"</span>
+        case StatusIdle:<span class="cov8" title="1">
+                return "Idle"</span>
+        case StatusComplete:<span class="cov8" title="1">
+                return "Complete"</span>
+        case StatusError:<span class="cov8" title="1">
+                return "Error"</span>
+        default:<span class="cov8" title="1">
+                return "Unknown"</span>
+        }
+}
+
+// Token pricing constants (per 1K tokens)
+// Deprecated: Use pricing from config instead
+const (
+        // Claude pricing as of 2024
+        InputTokenPricePerK  = 0.01  // $0.01 per 1K input tokens
+        OutputTokenPricePerK = 0.03  // $0.03 per 1K output tokens
+)
+
+// TokenUsage tracks token consumption and costs for a session
+type TokenUsage struct {
+        InputTokens   int     `json:"input_tokens"`
+        OutputTokens  int     `json:"output_tokens"`
+        TotalTokens   int     `json:"total_tokens"`
+        EstimatedCost float64 `json:"estimated_cost"`
+}
+
+// CalculateCost computes the estimated cost based on token usage
+// Deprecated: Use CalculateCostWithPricing instead
+func (tu *TokenUsage) CalculateCost() float64 <span class="cov8" title="1">{
+        inputCost := float64(tu.InputTokens) / 1000.0 * InputTokenPricePerK
+        outputCost := float64(tu.OutputTokens) / 1000.0 * OutputTokenPricePerK
+        return inputCost + outputCost
+}</span>
+
+// CalculateCostWithPricing computes the estimated cost based on token usage with custom pricing
+func (tu *TokenUsage) CalculateCostWithPricing(inputPricePerK, outputPricePerK float64) float64 <span class="cov8" title="1">{
+        inputCost := float64(tu.InputTokens) / 1000.0 * inputPricePerK
+        outputCost := float64(tu.OutputTokens) / 1000.0 * outputPricePerK
+        return inputCost + outputCost
+}</span>
+
+// UpdateTotals recalculates total tokens and estimated cost
+// Deprecated: Use UpdateTotalsWithPricing instead
+func (tu *TokenUsage) UpdateTotals() <span class="cov8" title="1">{
+        tu.TotalTokens = tu.InputTokens + tu.OutputTokens
+        tu.EstimatedCost = tu.CalculateCost()
+}</span>
+
+// UpdateTotalsWithPricing recalculates total tokens and estimated cost with custom pricing
+func (tu *TokenUsage) UpdateTotalsWithPricing(inputPricePerK, outputPricePerK float64) <span class="cov8" title="1">{
+        tu.TotalTokens = tu.InputTokens + tu.OutputTokens
+        tu.EstimatedCost = tu.CalculateCostWithPricing(inputPricePerK, outputPricePerK)
+}</span>
+
+// Message represents a single message in the Claude session
+type Message struct {
+        ID        string                 `json:"id"`
+        Type      string                 `json:"type"`
+        Role      string                 `json:"role"`
+        Content   string                 `json:"content"`
+        Timestamp time.Time              `json:"timestamp"`
+        Usage     TokenUsage             `json:"usage,omitempty"`
+        Meta      map[string]interface{} `json:"meta,omitempty"`
+}
+
+// Session represents a complete Claude Code session with all metadata
+type Session struct {
+        ID            string        `json:"id"`
+        ProjectPath   string        `json:"project_path"`
+        ProjectName   string        `json:"project_name"`
+        GitBranch     string        `json:"git_branch"`
+        GitWorktree   string        `json:"git_worktree"`
+        Status        SessionStatus `json:"status"`
+        StartTime     time.Time     `json:"start_time"`
+        LastActivity  time.Time     `json:"last_activity"`
+        CurrentTask   string        `json:"current_task"`
+        TokensUsed    TokenUsage    `json:"tokens_used"`
+        FilesModified []string      `json:"files_modified"`
+        Messages      []Message     `json:"messages"`
+        FilePath      string        `json:"file_path"` // Path to the .jsonl file
+}
+
+// Duration returns the total duration of the session
+func (s *Session) Duration() time.Duration <span class="cov8" title="1">{
+        if s.StartTime.IsZero() </span><span class="cov8" title="1">{
+                return 0
+        }</span>
+        <span class="cov8" title="1">endTime := s.LastActivity
+        if endTime.IsZero() </span><span class="cov0" title="0">{
+                endTime = time.Now()
+        }</span>
+        <span class="cov8" title="1">return endTime.Sub(s.StartTime)</span>
+}
+
+// TimeSinceLastActivity returns how long since the last activity
+func (s *Session) TimeSinceLastActivity() time.Duration <span class="cov8" title="1">{
+        if s.LastActivity.IsZero() </span><span class="cov8" title="1">{
+                return 0
+        }</span>
+        <span class="cov8" title="1">return time.Since(s.LastActivity)</span>
+}
+
+// IsActive returns true if the session has had recent activity
+func (s *Session) IsActive() bool <span class="cov8" title="1">{
+        if s.LastActivity.IsZero() </span><span class="cov8" title="1">{
+                return false
+        }</span>
+        <span class="cov8" title="1">return s.TimeSinceLastActivity() &lt; 2*time.Minute</span>
+}
+
+// UpdateStatus determines the current status based on activity and message content
+func (s *Session) UpdateStatus() <span class="cov8" title="1">{
+        timeSinceActivity := s.TimeSinceLastActivity()
+        
+        // Check if there are any messages
+        if len(s.Messages) == 0 </span><span class="cov8" title="1">{
+                s.Status = StatusIdle
+                return
+        }</span>
+        
+        // Check the last message for error indicators
+        <span class="cov8" title="1">lastMessage := s.Messages[len(s.Messages)-1]
+        if lastMessage.Type == "error" </span><span class="cov8" title="1">{
+                s.Status = StatusError
+                return
+        }</span>
+        
+        // Determine status based on recent activity
+        <span class="cov8" title="1">switch </span>{
+        case timeSinceActivity &lt; 2*time.Minute:<span class="cov8" title="1">
+                s.Status = StatusWorking</span>
+        case timeSinceActivity &lt; 15*time.Minute:<span class="cov8" title="1">
+                s.Status = StatusIdle</span>
+        default:<span class="cov8" title="1">
+                s.Status = StatusComplete</span>
+        }
+}
+
+// GetMessageCount returns the total number of messages in the session
+func (s *Session) GetMessageCount() int <span class="cov8" title="1">{
+        return len(s.Messages)
+}</span>
+
+// GetUserMessageCount returns the number of user messages
+func (s *Session) GetUserMessageCount() int <span class="cov8" title="1">{
+        count := 0
+        for _, msg := range s.Messages </span><span class="cov8" title="1">{
+                if msg.Role == "user" </span><span class="cov8" title="1">{
+                        count++
+                }</span>
+        }
+        <span class="cov8" title="1">return count</span>
+}
+
+// GetAssistantMessageCount returns the number of assistant messages
+func (s *Session) GetAssistantMessageCount() int <span class="cov8" title="1">{
+        count := 0
+        for _, msg := range s.Messages </span><span class="cov8" title="1">{
+                if msg.Role == "assistant" </span><span class="cov8" title="1">{
+                        count++
+                }</span>
+        }
+        <span class="cov8" title="1">return count</span>
+}
+
+// GetLastUserMessage returns the most recent user message content
+func (s *Session) GetLastUserMessage() string <span class="cov8" title="1">{
+        for i := len(s.Messages) - 1; i &gt;= 0; i-- </span><span class="cov8" title="1">{
+                if s.Messages[i].Role == "user" </span><span class="cov8" title="1">{
+                        return s.Messages[i].Content
+                }</span>
+        }
+        <span class="cov8" title="1">return ""</span>
+}
+
+// HasErrors returns true if the session contains any error messages
+func (s *Session) HasErrors() bool <span class="cov8" title="1">{
+        for _, msg := range s.Messages </span><span class="cov8" title="1">{
+                if msg.Type == "error" </span><span class="cov8" title="1">{
+                        return true
+                }</span>
+        }
+        <span class="cov8" title="1">return false</span>
+}
+
+// GetErrorMessages returns all error messages in the session
+func (s *Session) GetErrorMessages() []Message <span class="cov8" title="1">{
+        var errors []Message
+        for _, msg := range s.Messages </span><span class="cov8" title="1">{
+                if msg.Type == "error" </span><span class="cov8" title="1">{
+                        errors = append(errors, msg)
+                }</span>
+        }
+        <span class="cov8" title="1">return errors</span>
+}</pre>
+		
+		<pre class="file" id="file7" style="display: none">package claude
+
+import (
+        "fmt"
+        "os"
+        "path/filepath"
+        "strings"
+        "time"
+
+        "github.com/fsnotify/fsnotify"
+)
+
+// WatchEvent represents a file system event for a session
+type WatchEvent struct {
+        Type      string    `json:"type"`      // created, modified, deleted
+        SessionID string    `json:"session_id"`
+        Session   *Session  `json:"session,omitempty"`
+        Timestamp time.Time `json:"timestamp"`
+}
+
+// SessionWatcher watches for changes in Claude session files
+type SessionWatcher struct {
+        watcher      *fsnotify.Watcher
+        callback     func([]Session)
+        eventCallback func(WatchEvent)
+        stopChan     chan struct{}
+}
+
+// NewSessionWatcher creates a new file system watcher for Claude sessions
+func NewSessionWatcher(callback func([]Session)) (*SessionWatcher, error) <span class="cov0" title="0">{
+        watcher, err := fsnotify.NewWatcher()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create file watcher: %w", err)
+        }</span>
+        
+        <span class="cov0" title="0">sw := &amp;SessionWatcher{
+                watcher:  watcher,
+                callback: callback,
+                stopChan: make(chan struct{}),
+        }
+        
+        return sw, nil</span>
+}
+
+// SetEventCallback sets a callback for individual file events
+func (sw *SessionWatcher) SetEventCallback(callback func(WatchEvent)) <span class="cov0" title="0">{
+        sw.eventCallback = callback
+}</span>
+
+// Start begins watching for session file changes
+func (sw *SessionWatcher) Start() error <span class="cov0" title="0">{
+        homeDir, err := os.UserHomeDir()
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to get home directory: %w", err)
+        }</span>
+        
+        <span class="cov0" title="0">claudeDir := filepath.Join(homeDir, ".claude", "projects")
+        
+        // Add all directories in the projects folder to the watcher
+        err = filepath.Walk(claudeDir, func(path string, info os.FileInfo, err error) error </span><span class="cov0" title="0">{
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil // Skip paths we can't access
+                }</span>
+                
+                <span class="cov0" title="0">if info.IsDir() </span><span class="cov0" title="0">{
+                        return sw.watcher.Add(path)
+                }</span>
+                <span class="cov0" title="0">return nil</span>
+        })
+        
+        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to setup directory watching: %w", err)
+        }</span>
+        
+        // Start the event loop
+        <span class="cov0" title="0">go sw.eventLoop()
+        
+        return nil</span>
+}
+
+// Stop stops the file watcher
+func (sw *SessionWatcher) Stop() error <span class="cov0" title="0">{
+        close(sw.stopChan)
+        return sw.watcher.Close()
+}</span>
+
+// eventLoop processes file system events
+func (sw *SessionWatcher) eventLoop() <span class="cov0" title="0">{
+        // Debounce timer to avoid excessive updates
+        var debounceTimer *time.Timer
+        debounceDelay := 500 * time.Millisecond
+        
+        for </span><span class="cov0" title="0">{
+                select </span>{
+                case &lt;-sw.stopChan:<span class="cov0" title="0">
+                        if debounceTimer != nil </span><span class="cov0" title="0">{
+                                debounceTimer.Stop()
+                        }</span>
+                        <span class="cov0" title="0">return</span>
+                        
+                case event, ok := &lt;-sw.watcher.Events:<span class="cov0" title="0">
+                        if !ok </span><span class="cov0" title="0">{
+                                return
+                        }</span>
+                        
+                        // Watch new directories
+                        <span class="cov0" title="0">if event.Op&amp;fsnotify.Create == fsnotify.Create </span><span class="cov0" title="0">{
+                                if info, err := os.Stat(event.Name); err == nil &amp;&amp; info.IsDir() </span><span class="cov0" title="0">{
+                                        sw.watcher.Add(event.Name)
+                                }</span>
+                        }
+                        
+                        // Only care about .jsonl files that aren't summaries
+                        <span class="cov0" title="0">if strings.HasSuffix(event.Name, ".jsonl") &amp;&amp; !strings.Contains(event.Name, "summary") </span><span class="cov0" title="0">{
+                                // Extract session ID from filename
+                                sessionID := strings.TrimSuffix(filepath.Base(event.Name), ".jsonl")
+                                
+                                // Determine event type
+                                eventType := ""
+                                switch </span>{
+                                case event.Op&amp;fsnotify.Create == fsnotify.Create:<span class="cov0" title="0">
+                                        eventType = "created"</span>
+                                case event.Op&amp;fsnotify.Write == fsnotify.Write:<span class="cov0" title="0">
+                                        eventType = "modified"</span>
+                                case event.Op&amp;fsnotify.Remove == fsnotify.Remove:<span class="cov0" title="0">
+                                        eventType = "deleted"</span>
+                                }
+                                
+                                <span class="cov0" title="0">if eventType != "" </span><span class="cov0" title="0">{
+                                        // Send individual event if callback is set
+                                        if sw.eventCallback != nil </span><span class="cov0" title="0">{
+                                                watchEvent := WatchEvent{
+                                                        Type:      eventType,
+                                                        SessionID: sessionID,
+                                                        Timestamp: time.Now(),
+                                                }
+                                                
+                                                // Parse session for created/modified events
+                                                if eventType != "deleted" </span><span class="cov0" title="0">{
+                                                        if session, err := ParseSessionFile(event.Name); err == nil </span><span class="cov0" title="0">{
+                                                                watchEvent.Session = &amp;session
+                                                        }</span>
+                                                }
+                                                
+                                                <span class="cov0" title="0">sw.eventCallback(watchEvent)</span>
+                                        }
+                                        
+                                        // Debounce full session discovery
+                                        <span class="cov0" title="0">if debounceTimer != nil </span><span class="cov0" title="0">{
+                                                debounceTimer.Stop()
+                                        }</span>
+                                        <span class="cov0" title="0">debounceTimer = time.AfterFunc(debounceDelay, func() </span><span class="cov0" title="0">{
+                                                sessions, err := DiscoverSessions()
+                                                if err == nil &amp;&amp; sw.callback != nil </span><span class="cov0" title="0">{
+                                                        sw.callback(sessions)
+                                                }</span>
+                                        })
+                                }
+                        }
+                        
+                case err, ok := &lt;-sw.watcher.Errors:<span class="cov0" title="0">
+                        if !ok </span><span class="cov0" title="0">{
+                                return
+                        }</span>
+                        // Log error but continue watching
+                        <span class="cov0" title="0">fmt.Printf("File watcher error: %v\n", err)</span>
+                }
+        }
+}</pre>
+		
+		<pre class="file" id="file8" style="display: none">package config
+
+import (
+        "fmt"
+        "os"
+        "path/filepath"
+        "strings"
+
+        "github.com/spf13/viper"
+)
+
+// Config represents the complete application configuration
+type Config struct {
+        Server   ServerConfig   `mapstructure:"server"`
+        Claude   ClaudeConfig   `mapstructure:"claude"`
+        Pricing  PricingConfig  `mapstructure:"pricing"`
+        Features FeaturesConfig `mapstructure:"features"`
+}
+
+// ServerConfig contains HTTP server settings
+type ServerConfig struct {
+        Port            int      `mapstructure:"port"`
+        Host            string   `mapstructure:"host"`
+        ReadTimeout     int      `mapstructure:"read_timeout"`     // seconds
+        WriteTimeout    int      `mapstructure:"write_timeout"`    // seconds
+        ShutdownTimeout int      `mapstructure:"shutdown_timeout"` // seconds
+        CORS            CORSConfig `mapstructure:"cors"`
+}
+
+// CORSConfig contains CORS settings
+type CORSConfig struct {
+        Enabled          bool     `mapstructure:"enabled"`
+        AllowedOrigins   []string `mapstructure:"allowed_origins"`
+        AllowedMethods   []string `mapstructure:"allowed_methods"`
+        AllowedHeaders   []string `mapstructure:"allowed_headers"`
+        AllowCredentials bool     `mapstructure:"allow_credentials"`
+        MaxAge           int      `mapstructure:"max_age"`
+}
+
+// ClaudeConfig contains Claude-specific settings
+type ClaudeConfig struct {
+        HomeDirectory    string `mapstructure:"home_directory"`
+        ProjectsPath     string `mapstructure:"projects_path"`
+        WatchInterval    int    `mapstructure:"watch_interval"`    // seconds
+        CacheRefreshRate int    `mapstructure:"cache_refresh_rate"` // minutes
+}
+
+// PricingConfig contains token pricing information
+type PricingConfig struct {
+        InputTokensPerK  float64 `mapstructure:"input_tokens_per_k"`  // Cost per 1K input tokens
+        OutputTokensPerK float64 `mapstructure:"output_tokens_per_k"` // Cost per 1K output tokens
+        Currency         string  `mapstructure:"currency"`
+}
+
+// FeaturesConfig contains feature flags and settings
+type FeaturesConfig struct {
+        EnableWebSocket   bool `mapstructure:"enable_websocket"`
+        EnableFileWatcher bool `mapstructure:"enable_file_watcher"`
+        EnableMetrics     bool `mapstructure:"enable_metrics"`
+        EnableProfiling   bool `mapstructure:"enable_profiling"`
+        DebugMode         bool `mapstructure:"debug_mode"`
+}
+
+// DefaultConfig returns the default configuration
+func DefaultConfig() *Config <span class="cov8" title="1">{
+        homeDir, _ := os.UserHomeDir()
+        claudeDir := filepath.Join(homeDir, ".claude")
+        
+        return &amp;Config{
+                Server: ServerConfig{
+                        Port:            8080,
+                        Host:            "0.0.0.0",
+                        ReadTimeout:     15,
+                        WriteTimeout:    15,
+                        ShutdownTimeout: 10,
+                        CORS: CORSConfig{
+                                Enabled:          true,
+                                AllowedOrigins:   []string{"*"},
+                                AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+                                AllowedHeaders:   []string{"Origin", "Content-Type", "Accept", "Authorization"},
+                                AllowCredentials: true,
+                                MaxAge:           86400,
+                        },
+                },
+                Claude: ClaudeConfig{
+                        HomeDirectory:    claudeDir,
+                        ProjectsPath:     filepath.Join(claudeDir, "projects"),
+                        WatchInterval:    5,
+                        CacheRefreshRate: 5,
+                },
+                Pricing: PricingConfig{
+                        InputTokensPerK:  0.01,
+                        OutputTokensPerK: 0.03,
+                        Currency:         "USD",
+                },
+                Features: FeaturesConfig{
+                        EnableWebSocket:   true,
+                        EnableFileWatcher: true,
+                        EnableMetrics:     false,
+                        EnableProfiling:   false,
+                        DebugMode:         false,
+                },
+        }
+}</span>
+
+// LoadConfig loads configuration from multiple sources
+func LoadConfig(configFile string) (*Config, error) <span class="cov8" title="1">{
+        v := viper.New()
+        
+        // Set default values
+        setDefaults(v)
+        
+        // Set config file
+        if configFile != "" </span><span class="cov8" title="1">{
+                v.SetConfigFile(configFile)
+        }</span> else<span class="cov8" title="1"> {
+                // Look for config in standard locations
+                v.SetConfigName("config")
+                v.SetConfigType("yaml")
+                
+                // Add config paths
+                v.AddConfigPath(".")
+                v.AddConfigPath("./configs")
+                v.AddConfigPath("/etc/claude-session-manager")
+                
+                // User config directory
+                if homeDir, err := os.UserHomeDir(); err == nil </span><span class="cov8" title="1">{
+                        v.AddConfigPath(filepath.Join(homeDir, ".config", "claude-session-manager"))
+                }</span>
+        }
+        
+        // Environment variables
+        <span class="cov8" title="1">v.SetEnvPrefix("CSM")
+        v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+        v.AutomaticEnv()
+        
+        // Read config file if it exists
+        if err := v.ReadInConfig(); err != nil </span><span class="cov8" title="1">{
+                // It's okay if the config file doesn't exist, we have defaults
+                if _, ok := err.(viper.ConfigFileNotFoundError); !ok </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("error reading config file: %w", err)
+                }</span>
+        }
+        
+        // Unmarshal config
+        <span class="cov8" title="1">var config Config
+        if err := v.Unmarshal(&amp;config); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("unable to decode config: %w", err)
+        }</span>
+        
+        // Validate config
+        <span class="cov8" title="1">if err := validateConfig(&amp;config); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("invalid configuration: %w", err)
+        }</span>
+        
+        <span class="cov8" title="1">return &amp;config, nil</span>
+}
+
+// setDefaults sets default values in viper
+func setDefaults(v *viper.Viper) <span class="cov8" title="1">{
+        defaults := DefaultConfig()
+        
+        // Server defaults
+        v.SetDefault("server.port", defaults.Server.Port)
+        v.SetDefault("server.host", defaults.Server.Host)
+        v.SetDefault("server.read_timeout", defaults.Server.ReadTimeout)
+        v.SetDefault("server.write_timeout", defaults.Server.WriteTimeout)
+        v.SetDefault("server.shutdown_timeout", defaults.Server.ShutdownTimeout)
+        
+        // CORS defaults
+        v.SetDefault("server.cors.enabled", defaults.Server.CORS.Enabled)
+        v.SetDefault("server.cors.allowed_origins", defaults.Server.CORS.AllowedOrigins)
+        v.SetDefault("server.cors.allowed_methods", defaults.Server.CORS.AllowedMethods)
+        v.SetDefault("server.cors.allowed_headers", defaults.Server.CORS.AllowedHeaders)
+        v.SetDefault("server.cors.allow_credentials", defaults.Server.CORS.AllowCredentials)
+        v.SetDefault("server.cors.max_age", defaults.Server.CORS.MaxAge)
+        
+        // Claude defaults
+        v.SetDefault("claude.home_directory", defaults.Claude.HomeDirectory)
+        v.SetDefault("claude.projects_path", defaults.Claude.ProjectsPath)
+        v.SetDefault("claude.watch_interval", defaults.Claude.WatchInterval)
+        v.SetDefault("claude.cache_refresh_rate", defaults.Claude.CacheRefreshRate)
+        
+        // Pricing defaults
+        v.SetDefault("pricing.input_tokens_per_k", defaults.Pricing.InputTokensPerK)
+        v.SetDefault("pricing.output_tokens_per_k", defaults.Pricing.OutputTokensPerK)
+        v.SetDefault("pricing.currency", defaults.Pricing.Currency)
+        
+        // Features defaults
+        v.SetDefault("features.enable_websocket", defaults.Features.EnableWebSocket)
+        v.SetDefault("features.enable_file_watcher", defaults.Features.EnableFileWatcher)
+        v.SetDefault("features.enable_metrics", defaults.Features.EnableMetrics)
+        v.SetDefault("features.enable_profiling", defaults.Features.EnableProfiling)
+        v.SetDefault("features.debug_mode", defaults.Features.DebugMode)
+}</span>
+
+// validateConfig validates the configuration
+func validateConfig(config *Config) error <span class="cov8" title="1">{
+        // Validate server port
+        if config.Server.Port &lt; 1 || config.Server.Port &gt; 65535 </span><span class="cov8" title="1">{
+                return fmt.Errorf("invalid server port: %d", config.Server.Port)
+        }</span>
+        
+        // Validate timeouts
+        <span class="cov8" title="1">if config.Server.ReadTimeout &lt; 0 </span><span class="cov8" title="1">{
+                return fmt.Errorf("invalid read timeout: %d", config.Server.ReadTimeout)
+        }</span>
+        <span class="cov8" title="1">if config.Server.WriteTimeout &lt; 0 </span><span class="cov8" title="1">{
+                return fmt.Errorf("invalid write timeout: %d", config.Server.WriteTimeout)
+        }</span>
+        <span class="cov8" title="1">if config.Server.ShutdownTimeout &lt; 0 </span><span class="cov8" title="1">{
+                return fmt.Errorf("invalid shutdown timeout: %d", config.Server.ShutdownTimeout)
+        }</span>
+        
+        // Validate Claude settings
+        <span class="cov8" title="1">if config.Claude.WatchInterval &lt; 0 </span><span class="cov8" title="1">{
+                return fmt.Errorf("invalid watch interval: %d", config.Claude.WatchInterval)
+        }</span>
+        <span class="cov8" title="1">if config.Claude.CacheRefreshRate &lt; 0 </span><span class="cov8" title="1">{
+                return fmt.Errorf("invalid cache refresh rate: %d", config.Claude.CacheRefreshRate)
+        }</span>
+        
+        // Validate pricing
+        <span class="cov8" title="1">if config.Pricing.InputTokensPerK &lt; 0 </span><span class="cov8" title="1">{
+                return fmt.Errorf("invalid input token price: %f", config.Pricing.InputTokensPerK)
+        }</span>
+        <span class="cov8" title="1">if config.Pricing.OutputTokensPerK &lt; 0 </span><span class="cov8" title="1">{
+                return fmt.Errorf("invalid output token price: %f", config.Pricing.OutputTokensPerK)
+        }</span>
+        
+        <span class="cov8" title="1">return nil</span>
+}
+
+// GetConfigPath returns the path where the config file should be created
+func GetConfigPath() string <span class="cov8" title="1">{
+        if homeDir, err := os.UserHomeDir(); err == nil </span><span class="cov8" title="1">{
+                return filepath.Join(homeDir, ".config", "claude-session-manager", "config.yaml")
+        }</span>
+        <span class="cov0" title="0">return "config.yaml"</span>
+}</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

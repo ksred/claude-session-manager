@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Code Session Manager</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background: #0d0d0d;
+            color: #f0f0f0;
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        .terminal {
+            background: #1a1a1a;
+            border: 2px solid #333;
+            border-radius: 8px;
+            margin: 10px;
+            height: calc(100vh - 20px);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 30px rgba(0, 255, 150, 0.1);
+        }
+        
+        .terminal-header {
+            background: linear-gradient(135deg, #2d2d2d, #1a1a1a);
+            border-bottom: 1px solid #333;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+        }
+        
+        .terminal-title {
+            color: #00ff96;
+            font-weight: 600;
+        }
+        
+        .terminal-controls {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .control-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .close { background: #ff5f56; }
+        .minimize { background: #ffbd2e; }
+        .maximize { background: #27ca3f; }
+        
+        .main-content {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+        }
+        
+        .sidebar {
+            width: 320px;
+            background: #161616;
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .tabs {
+            display: flex;
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            padding: 0 16px;
+        }
+        
+        .tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 11px;
+            color: #888;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .tab.active {
+            color: #00ff96;
+            border-bottom-color: #00ff96;
+        }
+        
+        .tab:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .sessions-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+        
+        .session-item {
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .session-item:hover {
+            border-color: #555;
+            background: #252525;
+        }
+        
+        .session-item.active {
+            border-color: #00ff96;
+            background: rgba(0, 255, 150, 0.05);
+        }
+        
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .session-name {
+            font-weight: 600;
+            color: #fff;
+            font-size: 13px;
+        }
+        
+        .session-status {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 500;
+        }
+        
+        .status-working {
+            background: rgba(0, 255, 150, 0.2);
+            color: #00ff96;
+        }
+        
+        .status-idle {
+            background: rgba(255, 189, 46, 0.2);
+            color: #ffbd2e;
+        }
+        
+        .status-complete {
+            background: rgba(39, 202, 63, 0.2);
+            color: #27ca3f;
+        }
+        
+        .status-error {
+            background: rgba(255, 95, 86, 0.2);
+            color: #ff5f56;
+        }
+        
+        .session-info {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+        
+        .session-project {
+            color: #00d4ff;
+        }
+        
+        .session-time {
+            float: right;
+        }
+        
+        .session-task {
+            font-size: 10px;
+            color: #ccc;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .stats-section {
+            border-top: 1px solid #333;
+            padding: 16px;
+            background: #1a1a1a;
+        }
+        
+        .stats-title {
+            color: #00ff96;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 11px;
+        }
+        
+        .stat-label {
+            color: #888;
+        }
+        
+        .stat-value {
+            color: #fff;
+            font-weight: 500;
+        }
+        
+        .main-panel {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .panel-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+        }
+        
+        .refresh-btn {
+            background: rgba(0, 255, 150, 0.1);
+            border: 1px solid #00ff96;
+            color: #00ff96;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+        
+        .refresh-btn:hover {
+            background: rgba(0, 255, 150, 0.2);
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .metric-card {
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 16px;
+        }
+        
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .metric-title {
+            font-size: 12px;
+            color: #888;
+            font-weight: 500;
+        }
+        
+        .metric-icon {
+            color: #00ff96;
+            font-size: 14px;
+        }
+        
+        .metric-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        
+        .metric-change {
+            font-size: 10px;
+            color: #00ff96;
+        }
+        
+        .chart-container {
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .chart-title {
+            font-size: 14px;
+            color: #fff;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        
+        .chart {
+            height: 200px;
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+            padding: 0 8px;
+        }
+        
+        .bar {
+            width: 20px;
+            background: linear-gradient(180deg, #00ff96, #00d4ff);
+            border-radius: 2px 2px 0 0;
+            margin: 0 2px;
+            position: relative;
+            animation: grow 1s ease-out;
+        }
+        
+        @keyframes grow {
+            from { height: 0; }
+        }
+        
+        .bar:hover::after {
+            content: attr(data-value);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            white-space: nowrap;
+        }
+        
+        .activity-feed {
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 16px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .activity-title {
+            font-size: 14px;
+            color: #fff;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+        
+        .activity-item {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        
+        .activity-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        
+        .activity-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            margin-top: 2px;
+        }
+        
+        .activity-working {
+            background: rgba(0, 255, 150, 0.2);
+            color: #00ff96;
+        }
+        
+        .activity-complete {
+            background: rgba(39, 202, 63, 0.2);
+            color: #27ca3f;
+        }
+        
+        .activity-error {
+            background: rgba(255, 95, 86, 0.2);
+            color: #ff5f56;
+        }
+        
+        .activity-content {
+            flex: 1;
+        }
+        
+        .activity-message {
+            font-size: 12px;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        
+        .activity-meta {
+            font-size: 10px;
+            color: #888;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff96, #00d4ff);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+        
+        .scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .scrollbar::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        
+        .scrollbar::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 3px;
+        }
+        
+        .scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        
+        .blink {
+            animation: blink 2s infinite;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+    <div class="terminal">
+        <div class="terminal-header">
+            <div class="terminal-title">claude-session-manager v1.2.3</div>
+            <div style="color: #888; font-size: 10px;">Press 'q' to quit • 'r' to refresh • '?' for help</div>
+            <div class="terminal-controls">
+                <div class="control-btn close"></div>
+                <div class="control-btn minimize"></div>
+                <div class="control-btn maximize"></div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="sidebar scrollbar">
+                <div class="tabs">
+                    <div class="tab active">Sessions</div>
+                    <div class="tab">Projects</div>
+                </div>
+                
+                <div class="sessions-list scrollbar">
+                    <div class="session-item active">
+                        <div class="session-header">
+                            <div class="session-name">api-refactor</div>
+                            <div class="session-status status-working blink">Working</div>
+                        </div>
+                        <div class="session-info">
+                            <span class="session-project">myproject/main</span>
+                            <span class="session-time">2m</span>
+                        </div>
+                        <div class="session-task">Refactoring JWT authentication middleware...</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 65%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="session-item">
+                        <div class="session-header">
+                            <div class="session-name">db-migration</div>
+                            <div class="session-status status-idle">Idle</div>
+                        </div>
+                        <div class="session-info">
+                            <span class="session-project">myproject/db-fix</span>
+                            <span class="session-time">15m</span>
+                        </div>
+                        <div class="session-task">Awaiting user input for migration strategy</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 30%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="session-item">
+                        <div class="session-header">
+                            <div class="session-name">frontend-bug</div>
+                            <div class="session-status status-complete">Complete</div>
+                        </div>
+                        <div class="session-info">
+                            <span class="session-project">dashboard/v2</span>
+                            <span class="session-time">1h</span>
+                        </div>
+                        <div class="session-task">Fixed React component rendering issue</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 100%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="session-item">
+                        <div class="session-header">
+                            <div class="session-name">new-feature</div>
+                            <div class="session-status status-error">Error</div>
+                        </div>
+                        <div class="session-info">
+                            <span class="session-project">mobile-app/feat-x</span>
+                            <span class="session-time">5m</span>
+                        </div>
+                        <div class="session-task">Build failed: missing dependency</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 45%"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="stats-section">
+                    <div class="stats-title">📊 Daily Stats</div>
+                    <div class="stat-item">
+                        <span class="stat-label">Active Sessions</span>
+                        <span class="stat-value">4</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Tokens Used</span>
+                        <span class="stat-value">125.3K</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Cost Today</span>
+                        <span class="stat-value">$2.47</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Projects</span>
+                        <span class="stat-value">3</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="content">
+                <div class="main-panel scrollbar">
+                    <div class="panel-header">
+                        <div class="panel-title">Session: api-refactor</div>
+                        <button class="refresh-btn">Refresh</button>
+                    </div>
+                    
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <div class="metric-title">Tokens Used</div>
+                                <div class="metric-icon">🔢</div>
+                            </div>
+                            <div class="metric-value">42.1K</div>
+                            <div class="metric-change">+2.3K in last hour</div>
+                        </div>
+                        
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <div class="metric-title">Session Cost</div>
+                                <div class="metric-icon">💰</div>
+                            </div>
+                            <div class="metric-value">$0.84</div>
+                            <div class="metric-change">+$0.12 in last hour</div>
+                        </div>
+                        
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <div class="metric-title">Files Modified</div>
+                                <div class="metric-icon">📝</div>
+                            </div>
+                            <div class="metric-value">7</div>
+                            <div class="metric-change">2 in last 10min</div>
+                        </div>
+                        
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <div class="metric-title">Session Time</div>
+                                <div class="metric-icon">⏱️</div>
+                            </div>
+                            <div class="metric-value">2h 15m</div>
+                            <div class="metric-change">Active for 2min</div>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <div class="chart-title">🔥 Token Usage (Last 24h)</div>
+                        <div class="chart">
+                            <div class="bar" style="height: 45px" data-value="4.2K"></div>
+                            <div class="bar" style="height: 65px" data-value="6.1K"></div>
+                            <div class="bar" style="height: 35px" data-value="3.2K"></div>
+                            <div class="bar" style="height: 80px" data-value="7.8K"></div>
+                            <div class="bar" style="height: 95px" data-value="9.2K"></div>
+                            <div class="bar" style="height: 70px" data-value="6.9K"></div>
+                            <div class="bar" style="height: 55px" data-value="5.1K"></div>
+                            <div class="bar" style="height: 85px" data-value="8.3K"></div>
+                            <div class="bar" style="height: 75px" data-value="7.2K"></div>
+                            <div class="bar" style="height: 90px" data-value="8.9K"></div>
+                            <div class="bar" style="height: 60px" data-value="5.8K"></div>
+                            <div class="bar" style="height: 120px" data-value="12.1K"></div>
+                            <div class="bar" style="height: 110px" data-value="10.9K"></div>
+                            <div class="bar" style="height: 145px" data-value="14.2K"></div>
+                            <div class="bar" style="height: 165px" data-value="16.1K"></div>
+                            <div class="bar" style="height: 185px" data-value="18.4K"></div>
+                            <div class="bar" style="height: 200px" data-value="19.8K"></div>
+                            <div class="bar" style="height: 175px" data-value="17.2K"></div>
+                            <div class="bar" style="height: 155px" data-value="15.1K"></div>
+                            <div class="bar" style="height: 135px" data-value="13.2K"></div>
+                            <div class="bar" style="height: 125px" data-value="12.1K"></div>
+                            <div class="bar" style="height: 115px" data-value="11.3K"></div>
+                            <div class="bar" style="height: 95px" data-value="9.2K"></div>
+                            <div class="bar" style="height: 75px" data-value="7.1K"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="activity-feed scrollbar">
+                        <div class="activity-title">🕒 Recent Activity</div>
+                        <div class="activity-item">
+                            <div class="activity-icon activity-working">⚡</div>
+                            <div class="activity-content">
+                                <div class="activity-message">Refactoring JWT middleware authentication flow</div>
+                                <div class="activity-meta">api-refactor • 30 seconds ago • 847 tokens</div>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon activity-complete">✓</div>
+                            <div class="activity-content">
+                                <div class="activity-message">Updated user authentication tests</div>
+                                <div class="activity-meta">api-refactor • 2 minutes ago • 523 tokens</div>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon activity-complete">✓</div>
+                            <div class="activity-content">
+                                <div class="activity-message">Generated middleware validation schema</div>
+                                <div class="activity-meta">api-refactor • 4 minutes ago • 612 tokens</div>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon activity-error">✗</div>
+                            <div class="activity-content">
+                                <div class="activity-message">Build failed on mobile-app/feat-x</div>
+                                <div class="activity-meta">new-feature • 5 minutes ago • 234 tokens</div>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon activity-complete">✓</div>
+                            <div class="activity-content">
+                                <div class="activity-message">Completed React component fix</div>
+                                <div class="activity-meta">frontend-bug • 8 minutes ago • 1.2K tokens</div>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon activity-working">⚡</div>
+                            <div class="activity-content">
+                                <div class="activity-message">Analysing database migration strategy</div>
+                                <div class="activity-meta">db-migration • 15 minutes ago • 890 tokens</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simulate real-time updates
+        function updateMetrics() {
+            const tokenValue = document.querySelector('.metric-value');
+            if (tokenValue && tokenValue.textContent.includes('42.1K')) {
+                const current = parseFloat(tokenValue.textContent.replace('K', ''));
+                const newValue = (current + Math.random() * 0.1).toFixed(1);
+                tokenValue.textContent = newValue + 'K';
+            }
+        }
+
+        function addActivityItem() {
+            const activities = [
+                "Optimising database query performance",
+                "Generating API documentation",
+                "Running test suite validation",
+                "Implementing error handling",
+                "Updating configuration files"
+            ];
+            
+            const feed = document.querySelector('.activity-feed');
+            const items = feed.querySelectorAll('.activity-item');
+            
+            if (items.length > 6) {
+                items[items.length - 1].remove();
+            }
+            
+            const newItem = document.createElement('div');
+            newItem.className = 'activity-item';
+            newItem.innerHTML = `
+                <div class="activity-icon activity-working">⚡</div>
+                <div class="activity-content">
+                    <div class="activity-message">${activities[Math.floor(Math.random() * activities.length)]}</div>
+                    <div class="activity-meta">api-refactor • just now • ${Math.floor(Math.random() * 800 + 200)} tokens</div>
+                </div>
+            `;
+            
+            const title = feed.querySelector('.activity-title');
+            title.insertAdjacentElement('afterend', newItem);
+        }
+
+        // Update every few seconds to simulate real-time
+        setInterval(updateMetrics, 3000);
+        setInterval(addActivityItem, 8000);
+
+        // Add keyboard navigation simulation
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'q') {
+                document.body.style.opacity = '0.5';
+                setTimeout(() => document.body.style.opacity = '1', 200);
+            }
+            if (e.key === 'r') {
+                location.reload();
+            }
+        });
+
+        // Simulate session switching
+        document.querySelectorAll('.session-item').forEach(item => {
+            item.addEventListener('click', function() {
+                document.querySelectorAll('.session-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                
+                const sessionName = this.querySelector('.session-name').textContent;
+                document.querySelector('.panel-title').textContent = `Session: ${sessionName}`;
+            });
+        });
+    </script>
+</body>
+</html>

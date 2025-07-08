@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./build/claude-session-manager:*)",
+      "Bash(curl:*)",
+      "Bash(jq:*)",
+      "Bash(for file in ~/.claude/projects/*/*.jsonl)",
+      "Bash(do echo \"=== $file ===\")",
+      "Bash(done)"
+    ],
+    "deny": []
+  }
+}

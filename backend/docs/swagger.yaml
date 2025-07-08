@@ -1,0 +1,512 @@
+basePath: /api/v1
+definitions:
+  api.ActivityEntry:
+    description: A single activity entry in the system timeline
+    properties:
+      details:
+        example: User sent a message
+        type: string
+      session_id:
+        example: session_123456
+        type: string
+      session_name:
+        example: my-project
+        type: string
+      timestamp:
+        example: "2023-01-01T10:00:00Z"
+        type: string
+      type:
+        enum:
+        - message_sent
+        - session_created
+        - session_updated
+        - error
+        example: message_sent
+        type: string
+    type: object
+  api.ActivityResponse:
+    description: Activity timeline with entries
+    properties:
+      activity:
+        items:
+          $ref: '#/definitions/api.ActivityEntry'
+        type: array
+      total:
+        example: 100
+        type: integer
+    type: object
+  api.DailySessionCount:
+    description: Daily session count information
+    properties:
+      count:
+        example: 15
+        type: integer
+      date:
+        example: "2023-01-01"
+        type: string
+    type: object
+  api.ErrorResponse:
+    description: Error response structure
+    properties:
+      code:
+        example: 404
+        type: integer
+      details:
+        example: Session with ID 'invalid' does not exist
+        type: string
+      error:
+        example: Session not found
+        type: string
+    type: object
+  api.HealthResponse:
+    description: Health check response
+    properties:
+      status:
+        example: ok
+        type: string
+      timestamp:
+        example: "2023-01-01T10:00:00Z"
+        type: string
+      uptime:
+        example: 2h30m15s
+        type: string
+      version:
+        example: 1.0.0
+        type: string
+    type: object
+  api.MetricsSummary:
+    description: Overall system metrics and statistics
+    properties:
+      active_sessions:
+        example: 5
+        type: integer
+      average_session_duration_minutes:
+        example: 45.2
+        type: number
+      model_usage:
+        additionalProperties:
+          type: integer
+        type: object
+      most_used_model:
+        example: claude-3-opus
+        type: string
+      total_estimated_cost:
+        example: 15.75
+        type: number
+      total_messages:
+        example: 2500
+        type: integer
+      total_sessions:
+        example: 150
+        type: integer
+      total_tokens_used:
+        example: 125000
+        type: integer
+    type: object
+  api.PeakHourInfo:
+    description: Peak hour usage information
+    properties:
+      average_sessions:
+        example: 5.2
+        type: number
+      hour:
+        example: 14
+        type: integer
+    type: object
+  api.SearchResponse:
+    description: Search results with query information
+    properties:
+      query:
+        example: authentication
+        type: string
+      results:
+        items:
+          $ref: '#/definitions/api.SessionResponse'
+        type: array
+      total:
+        example: 5
+        type: integer
+    type: object
+  api.SessionResponse:
+    description: Session information with metadata and statistics
+    properties:
+      created_at:
+        example: "2023-01-01T10:00:00Z"
+        type: string
+      current_task:
+        example: Implement user authentication
+        type: string
+      duration_seconds:
+        example: 5400
+        type: integer
+      files_modified:
+        example:
+        - '["/src/auth.go"'
+        - '"/src/user.go"]'
+        items:
+          type: string
+        type: array
+      git_branch:
+        example: feature/auth
+        type: string
+      git_worktree:
+        example: main
+        type: string
+      id:
+        example: session_123456
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      message_count:
+        example: 25
+        type: integer
+      model:
+        example: claude-3-opus
+        type: string
+      project_name:
+        example: my-awesome-project
+        type: string
+      project_path:
+        example: /home/user/my-project
+        type: string
+      status:
+        enum:
+        - active
+        - idle
+        - completed
+        - error
+        example: active
+        type: string
+      title:
+        example: Implement user authentication
+        type: string
+      tokens_used:
+        $ref: '#/definitions/claude.TokenUsage'
+      updated_at:
+        example: "2023-01-01T11:30:00Z"
+        type: string
+    type: object
+  api.SessionsLimitResponse:
+    description: List of sessions with limit info
+    properties:
+      limit:
+        example: 10
+        type: integer
+      sessions:
+        items:
+          $ref: '#/definitions/api.SessionResponse'
+        type: array
+    type: object
+  api.SessionsResponse:
+    description: List of sessions with pagination info
+    properties:
+      sessions:
+        items:
+          $ref: '#/definitions/api.SessionResponse'
+        type: array
+      total:
+        example: 42
+        type: integer
+    type: object
+  api.UsageStats:
+    description: Usage statistics and analytics
+    properties:
+      daily_sessions:
+        items:
+          $ref: '#/definitions/api.DailySessionCount'
+        type: array
+      model_usage:
+        additionalProperties:
+          type: integer
+        type: object
+      peak_hours:
+        items:
+          $ref: '#/definitions/api.PeakHourInfo'
+        type: array
+    type: object
+  api.WebSocketMessage:
+    description: WebSocket message structure for real-time updates
+    properties:
+      data: {}
+      session_id:
+        example: session_123456
+        type: string
+      timestamp:
+        example: "2023-01-01T10:00:00Z"
+        type: string
+      type:
+        example: session_update
+        type: string
+    type: object
+  claude.TokenUsage:
+    properties:
+      cache_creation_input_tokens:
+        type: integer
+      cache_read_input_tokens:
+        type: integer
+      estimated_cost:
+        type: number
+      input_tokens:
+        type: integer
+      output_tokens:
+        type: integer
+      total_tokens:
+        type: integer
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@claude-session-manager.com
+    name: Claude Session Manager Support
+    url: https://github.com/ksred/claude-session-manager
+  description: A comprehensive API for managing and monitoring Claude.ai sessions
+    with real-time analytics and insights.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: https://github.com/ksred/claude-session-manager
+  title: Claude Session Manager API
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: Check the health status of the Claude Session Manager API
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Service is healthy
+          schema:
+            $ref: '#/definitions/api.HealthResponse'
+      summary: Health check
+      tags:
+      - Health
+  /metrics/activity:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve recent activity timeline including session events and
+        message activity
+      parameters:
+      - default: 50
+        description: Maximum number of activities to return
+        in: query
+        maximum: 500
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved activity timeline
+          schema:
+            $ref: '#/definitions/api.ActivityResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get activity timeline
+      tags:
+      - Metrics
+  /metrics/summary:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve overall system metrics including session counts, token
+        usage, and cost estimates
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved metrics summary
+          schema:
+            $ref: '#/definitions/api.MetricsSummary'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get metrics summary
+      tags:
+      - Metrics
+  /metrics/usage:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve detailed usage statistics including daily sessions, model
+        usage, and peak hours
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved usage statistics
+          schema:
+            $ref: '#/definitions/api.UsageStats'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get usage statistics
+      tags:
+      - Metrics
+  /search:
+    get:
+      consumes:
+      - application/json
+      description: Search across sessions by project name, task description, message
+        content, or file paths
+      parameters:
+      - description: Search query
+        example: '"authentication"'
+        in: query
+        maxLength: 100
+        minLength: 1
+        name: q
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved search results
+          schema:
+            $ref: '#/definitions/api.SearchResponse'
+        "400":
+          description: Invalid search query
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Search sessions
+      tags:
+      - Search
+  /sessions:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve all Claude sessions with their metadata and statistics
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved sessions
+          schema:
+            $ref: '#/definitions/api.SessionsResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get all sessions
+      tags:
+      - Sessions
+  /sessions/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a specific Claude session by its unique identifier
+      parameters:
+      - description: Session ID
+        example: '"session_123456"'
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Session found
+          schema:
+            $ref: '#/definitions/api.SessionResponse'
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get session by ID
+      tags:
+      - Sessions
+  /sessions/active:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve all currently active Claude sessions (working or idle
+        status)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved active sessions
+          schema:
+            $ref: '#/definitions/api.SessionsResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get active sessions
+      tags:
+      - Sessions
+  /sessions/recent:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve the most recent Claude sessions with optional limit
+      parameters:
+      - default: 10
+        description: Maximum number of sessions to return
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved recent sessions
+          schema:
+            $ref: '#/definitions/api.SessionsLimitResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get recent sessions
+      tags:
+      - Sessions
+  /ws:
+    get:
+      consumes:
+      - application/json
+      description: Establish a WebSocket connection for real-time session updates
+      produces:
+      - application/json
+      responses:
+        "101":
+          description: WebSocket connection established
+          schema:
+            $ref: '#/definitions/api.WebSocketMessage'
+        "400":
+          description: Failed to upgrade connection
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: WebSocket endpoint
+      tags:
+      - WebSocket
+schemes:
+- http
+- https
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+    x-extension-openapi: '{"example": "value"}'
+swagger: "2.0"

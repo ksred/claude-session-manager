@@ -1,0 +1,731 @@
+{
+    "schemes": [
+        "http",
+        "https"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "A comprehensive API for managing and monitoring Claude.ai sessions with real-time analytics and insights.",
+        "title": "Claude Session Manager API",
+        "termsOfService": "https://github.com/ksred/claude-session-manager",
+        "contact": {
+            "name": "Claude Session Manager Support",
+            "url": "https://github.com/ksred/claude-session-manager",
+            "email": "support@claude-session-manager.com"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
+        },
+        "version": "1.0.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/api/v1",
+    "paths": {
+        "/health": {
+            "get": {
+                "description": "Check the health status of the Claude Session Manager API",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "Service is healthy",
+                        "schema": {
+                            "$ref": "#/definitions/api.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics/activity": {
+            "get": {
+                "description": "Retrieve recent activity timeline including session events and message activity",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Metrics"
+                ],
+                "summary": "Get activity timeline",
+                "parameters": [
+                    {
+                        "maximum": 500,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Maximum number of activities to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved activity timeline",
+                        "schema": {
+                            "$ref": "#/definitions/api.ActivityResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics/summary": {
+            "get": {
+                "description": "Retrieve overall system metrics including session counts, token usage, and cost estimates",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Metrics"
+                ],
+                "summary": "Get metrics summary",
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved metrics summary",
+                        "schema": {
+                            "$ref": "#/definitions/api.MetricsSummary"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics/usage": {
+            "get": {
+                "description": "Retrieve detailed usage statistics including daily sessions, model usage, and peak hours",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Metrics"
+                ],
+                "summary": "Get usage statistics",
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved usage statistics",
+                        "schema": {
+                            "$ref": "#/definitions/api.UsageStats"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/search": {
+            "get": {
+                "description": "Search across sessions by project name, task description, message content, or file paths",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Search"
+                ],
+                "summary": "Search sessions",
+                "parameters": [
+                    {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string",
+                        "example": "\"authentication\"",
+                        "description": "Search query",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved search results",
+                        "schema": {
+                            "$ref": "#/definitions/api.SearchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid search query",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions": {
+            "get": {
+                "description": "Retrieve all Claude sessions with their metadata and statistics",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "Get all sessions",
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved sessions",
+                        "schema": {
+                            "$ref": "#/definitions/api.SessionsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions/active": {
+            "get": {
+                "description": "Retrieve all currently active Claude sessions (working or idle status)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "Get active sessions",
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved active sessions",
+                        "schema": {
+                            "$ref": "#/definitions/api.SessionsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions/recent": {
+            "get": {
+                "description": "Retrieve the most recent Claude sessions with optional limit",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "Get recent sessions",
+                "parameters": [
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Maximum number of sessions to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved recent sessions",
+                        "schema": {
+                            "$ref": "#/definitions/api.SessionsLimitResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions/{id}": {
+            "get": {
+                "description": "Retrieve a specific Claude session by its unique identifier",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "Get session by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "\"session_123456\"",
+                        "description": "Session ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Session found",
+                        "schema": {
+                            "$ref": "#/definitions/api.SessionResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Session not found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ws": {
+            "get": {
+                "description": "Establish a WebSocket connection for real-time session updates",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "WebSocket"
+                ],
+                "summary": "WebSocket endpoint",
+                "responses": {
+                    "101": {
+                        "description": "WebSocket connection established",
+                        "schema": {
+                            "$ref": "#/definitions/api.WebSocketMessage"
+                        }
+                    },
+                    "400": {
+                        "description": "Failed to upgrade connection",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "api.ActivityEntry": {
+            "description": "A single activity entry in the system timeline",
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "string",
+                    "example": "User sent a message"
+                },
+                "session_id": {
+                    "type": "string",
+                    "example": "session_123456"
+                },
+                "session_name": {
+                    "type": "string",
+                    "example": "my-project"
+                },
+                "timestamp": {
+                    "type": "string",
+                    "example": "2023-01-01T10:00:00Z"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "message_sent",
+                        "session_created",
+                        "session_updated",
+                        "error"
+                    ],
+                    "example": "message_sent"
+                }
+            }
+        },
+        "api.ActivityResponse": {
+            "description": "Activity timeline with entries",
+            "type": "object",
+            "properties": {
+                "activity": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.ActivityEntry"
+                    }
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 100
+                }
+            }
+        },
+        "api.DailySessionCount": {
+            "description": "Daily session count information",
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "example": 15
+                },
+                "date": {
+                    "type": "string",
+                    "example": "2023-01-01"
+                }
+            }
+        },
+        "api.ErrorResponse": {
+            "description": "Error response structure",
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 404
+                },
+                "details": {
+                    "type": "string",
+                    "example": "Session with ID 'invalid' does not exist"
+                },
+                "error": {
+                    "type": "string",
+                    "example": "Session not found"
+                }
+            }
+        },
+        "api.HealthResponse": {
+            "description": "Health check response",
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                },
+                "timestamp": {
+                    "type": "string",
+                    "example": "2023-01-01T10:00:00Z"
+                },
+                "uptime": {
+                    "type": "string",
+                    "example": "2h30m15s"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "1.0.0"
+                }
+            }
+        },
+        "api.MetricsSummary": {
+            "description": "Overall system metrics and statistics",
+            "type": "object",
+            "properties": {
+                "active_sessions": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "average_session_duration_minutes": {
+                    "type": "number",
+                    "example": 45.2
+                },
+                "model_usage": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "most_used_model": {
+                    "type": "string",
+                    "example": "claude-3-opus"
+                },
+                "total_estimated_cost": {
+                    "type": "number",
+                    "example": 15.75
+                },
+                "total_messages": {
+                    "type": "integer",
+                    "example": 2500
+                },
+                "total_sessions": {
+                    "type": "integer",
+                    "example": 150
+                },
+                "total_tokens_used": {
+                    "type": "integer",
+                    "example": 125000
+                }
+            }
+        },
+        "api.PeakHourInfo": {
+            "description": "Peak hour usage information",
+            "type": "object",
+            "properties": {
+                "average_sessions": {
+                    "type": "number",
+                    "example": 5.2
+                },
+                "hour": {
+                    "type": "integer",
+                    "example": 14
+                }
+            }
+        },
+        "api.SearchResponse": {
+            "description": "Search results with query information",
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "example": "authentication"
+                },
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.SessionResponse"
+                    }
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 5
+                }
+            }
+        },
+        "api.SessionResponse": {
+            "description": "Session information with metadata and statistics",
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string",
+                    "example": "2023-01-01T10:00:00Z"
+                },
+                "current_task": {
+                    "type": "string",
+                    "example": "Implement user authentication"
+                },
+                "duration_seconds": {
+                    "type": "integer",
+                    "example": 5400
+                },
+                "files_modified": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"/src/auth.go\"",
+                        "\"/src/user.go\"]"
+                    ]
+                },
+                "git_branch": {
+                    "type": "string",
+                    "example": "feature/auth"
+                },
+                "git_worktree": {
+                    "type": "string",
+                    "example": "main"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "session_123456"
+                },
+                "is_active": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "message_count": {
+                    "type": "integer",
+                    "example": 25
+                },
+                "model": {
+                    "type": "string",
+                    "example": "claude-3-opus"
+                },
+                "project_name": {
+                    "type": "string",
+                    "example": "my-awesome-project"
+                },
+                "project_path": {
+                    "type": "string",
+                    "example": "/home/user/my-project"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "active",
+                        "idle",
+                        "completed",
+                        "error"
+                    ],
+                    "example": "active"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Implement user authentication"
+                },
+                "tokens_used": {
+                    "$ref": "#/definitions/claude.TokenUsage"
+                },
+                "updated_at": {
+                    "type": "string",
+                    "example": "2023-01-01T11:30:00Z"
+                }
+            }
+        },
+        "api.SessionsLimitResponse": {
+            "description": "List of sessions with limit info",
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "sessions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.SessionResponse"
+                    }
+                }
+            }
+        },
+        "api.SessionsResponse": {
+            "description": "List of sessions with pagination info",
+            "type": "object",
+            "properties": {
+                "sessions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.SessionResponse"
+                    }
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 42
+                }
+            }
+        },
+        "api.UsageStats": {
+            "description": "Usage statistics and analytics",
+            "type": "object",
+            "properties": {
+                "daily_sessions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.DailySessionCount"
+                    }
+                },
+                "model_usage": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "peak_hours": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.PeakHourInfo"
+                    }
+                }
+            }
+        },
+        "api.WebSocketMessage": {
+            "description": "WebSocket message structure for real-time updates",
+            "type": "object",
+            "properties": {
+                "data": {},
+                "session_id": {
+                    "type": "string",
+                    "example": "session_123456"
+                },
+                "timestamp": {
+                    "type": "string",
+                    "example": "2023-01-01T10:00:00Z"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "session_update"
+                }
+            }
+        },
+        "claude.TokenUsage": {
+            "type": "object",
+            "properties": {
+                "cache_creation_input_tokens": {
+                    "type": "integer"
+                },
+                "cache_read_input_tokens": {
+                    "type": "integer"
+                },
+                "estimated_cost": {
+                    "type": "number"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "output_tokens": {
+                    "type": "integer"
+                },
+                "total_tokens": {
+                    "type": "integer"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "ApiKeyAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header",
+            "x-extension-openapi": "{\"example\": \"value\"}"
+        }
+    }
+}

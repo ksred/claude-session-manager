@@ -1,0 +1,1275 @@
+{
+    "item": [
+        {
+            "name": "Health",
+            "description": "",
+            "item": [
+                {
+                    "id": "551ef413-7ae6-4c86-bcf4-f17e24f3b75a",
+                    "name": "Health check",
+                    "request": {
+                        "name": "Health check",
+                        "description": {
+                            "content": "Check the health status of the Claude Session Manager API",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "health"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "68ee7e60-e4c6-44f9-9995-78b4706d6875",
+                            "name": "Service is healthy",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "health"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"status\": \"<string>\",\n  \"timestamp\": \"<string>\",\n  \"uptime\": \"<string>\",\n  \"version\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Metrics",
+            "description": "",
+            "item": [
+                {
+                    "id": "ea81d141-a299-49b6-878d-3bbd277694e7",
+                    "name": "Get activity timeline",
+                    "request": {
+                        "name": "Get activity timeline",
+                        "description": {
+                            "content": "Retrieve recent activity timeline including session events and message activity",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "metrics",
+                                "activity"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "Maximum number of activities to return",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "limit",
+                                    "value": "50"
+                                }
+                            ],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "5c70726e-702d-4c94-8fa9-c564140763ad",
+                            "name": "Successfully retrieved activity timeline",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "metrics",
+                                        "activity"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "Maximum number of activities to return",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "limit",
+                                            "value": "50"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"activity\": [\n    {\n      \"details\": \"<string>\",\n      \"session_id\": \"<string>\",\n      \"session_name\": \"<string>\",\n      \"timestamp\": \"<string>\",\n      \"type\": \"error\"\n    },\n    {\n      \"details\": \"<string>\",\n      \"session_id\": \"<string>\",\n      \"session_name\": \"<string>\",\n      \"timestamp\": \"<string>\",\n      \"type\": \"session_created\"\n    }\n  ],\n  \"total\": \"<integer>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "90fd882e-b5d0-4541-90fe-b1665235607a",
+                            "name": "Internal server error",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "metrics",
+                                        "activity"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "Maximum number of activities to return",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "limit",
+                                            "value": "50"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Internal Server Error",
+                            "code": 500,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"code\": \"<integer>\",\n  \"details\": \"<string>\",\n  \"error\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "ea491106-cf9d-4cdd-8fd2-0742b9073c01",
+                    "name": "Get metrics summary",
+                    "request": {
+                        "name": "Get metrics summary",
+                        "description": {
+                            "content": "Retrieve overall system metrics including session counts, token usage, and cost estimates",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "metrics",
+                                "summary"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "b8f9b766-95dd-40b1-9cd4-54b0abb4cb17",
+                            "name": "Successfully retrieved metrics summary",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "metrics",
+                                        "summary"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"active_sessions\": \"<integer>\",\n  \"average_session_duration_minutes\": \"<number>\",\n  \"model_usage\": {\n    \"in_9f\": \"<integer>\",\n    \"mollit2\": \"<integer>\"\n  },\n  \"most_used_model\": \"<string>\",\n  \"total_estimated_cost\": \"<number>\",\n  \"total_messages\": \"<integer>\",\n  \"total_sessions\": \"<integer>\",\n  \"total_tokens_used\": \"<integer>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "f54729ee-fa2a-4f35-a73c-4d3c980975c9",
+                            "name": "Internal server error",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "metrics",
+                                        "summary"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Internal Server Error",
+                            "code": 500,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"code\": \"<integer>\",\n  \"details\": \"<string>\",\n  \"error\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "0a34b3ae-dc6a-4912-bfd8-b68578d572c1",
+                    "name": "Get usage statistics",
+                    "request": {
+                        "name": "Get usage statistics",
+                        "description": {
+                            "content": "Retrieve detailed usage statistics including daily sessions, model usage, and peak hours",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "metrics",
+                                "usage"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "fc0d1f80-10a2-4bed-b23e-a1cb00541da7",
+                            "name": "Successfully retrieved usage statistics",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "metrics",
+                                        "usage"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"daily_sessions\": [\n    {\n      \"count\": \"<integer>\",\n      \"date\": \"<string>\"\n    },\n    {\n      \"count\": \"<integer>\",\n      \"date\": \"<string>\"\n    }\n  ],\n  \"model_usage\": {\n    \"fugiatb2\": \"<integer>\"\n  },\n  \"peak_hours\": [\n    {\n      \"average_sessions\": \"<number>\",\n      \"hour\": \"<integer>\"\n    },\n    {\n      \"average_sessions\": \"<number>\",\n      \"hour\": \"<integer>\"\n    }\n  ]\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "b654a704-4c3f-4863-954d-588bb1c31d27",
+                            "name": "Internal server error",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "metrics",
+                                        "usage"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Internal Server Error",
+                            "code": 500,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"code\": \"<integer>\",\n  \"details\": \"<string>\",\n  \"error\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Search",
+            "description": "",
+            "item": [
+                {
+                    "id": "4ae0ba71-a453-43a1-88f5-ea9e6e0cfaa7",
+                    "name": "Search sessions",
+                    "request": {
+                        "name": "Search sessions",
+                        "description": {
+                            "content": "Search across sessions by project name, task description, message content, or file paths",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "search"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "(Required) Search query",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "q",
+                                    "value": "<string>"
+                                }
+                            ],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "c4383c49-05ba-48d6-8345-4456da49eded",
+                            "name": "Successfully retrieved search results",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "search"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) Search query",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "q",
+                                            "value": "<string>"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"query\": \"<string>\",\n  \"results\": [\n    {\n      \"created_at\": \"<string>\",\n      \"current_task\": \"<string>\",\n      \"duration_seconds\": \"<integer>\",\n      \"files_modified\": [\n        \"<string>\",\n        \"<string>\"\n      ],\n      \"git_branch\": \"<string>\",\n      \"git_worktree\": \"<string>\",\n      \"id\": \"<string>\",\n      \"is_active\": \"<boolean>\",\n      \"message_count\": \"<integer>\",\n      \"model\": \"<string>\",\n      \"project_name\": \"<string>\",\n      \"project_path\": \"<string>\",\n      \"status\": \"idle\",\n      \"title\": \"<string>\",\n      \"tokens_used\": {\n        \"estimated_cost\": \"<number>\",\n        \"input_tokens\": \"<integer>\",\n        \"output_tokens\": \"<integer>\",\n        \"total_tokens\": \"<integer>\"\n      },\n      \"updated_at\": \"<string>\"\n    },\n    {\n      \"created_at\": \"<string>\",\n      \"current_task\": \"<string>\",\n      \"duration_seconds\": \"<integer>\",\n      \"files_modified\": [\n        \"<string>\",\n        \"<string>\"\n      ],\n      \"git_branch\": \"<string>\",\n      \"git_worktree\": \"<string>\",\n      \"id\": \"<string>\",\n      \"is_active\": \"<boolean>\",\n      \"message_count\": \"<integer>\",\n      \"model\": \"<string>\",\n      \"project_name\": \"<string>\",\n      \"project_path\": \"<string>\",\n      \"status\": \"completed\",\n      \"title\": \"<string>\",\n      \"tokens_used\": {\n        \"estimated_cost\": \"<number>\",\n        \"input_tokens\": \"<integer>\",\n        \"output_tokens\": \"<integer>\",\n        \"total_tokens\": \"<integer>\"\n      },\n      \"updated_at\": \"<string>\"\n    }\n  ],\n  \"total\": \"<integer>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "3ab88c89-a69c-40da-aee2-9c8d395c1f63",
+                            "name": "Invalid search query",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "search"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) Search query",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "q",
+                                            "value": "<string>"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Bad Request",
+                            "code": 400,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"code\": \"<integer>\",\n  \"details\": \"<string>\",\n  \"error\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "9ba7fc7a-e9ee-4c47-a7c6-966e394f6d28",
+                            "name": "Internal server error",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "search"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "(Required) Search query",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "q",
+                                            "value": "<string>"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Internal Server Error",
+                            "code": 500,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"code\": \"<integer>\",\n  \"details\": \"<string>\",\n  \"error\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Sessions",
+            "description": "",
+            "item": [
+                {
+                    "id": "1a99cadd-ffab-4667-8df0-193609da47b6",
+                    "name": "Get all sessions",
+                    "request": {
+                        "name": "Get all sessions",
+                        "description": {
+                            "content": "Retrieve all Claude sessions with their metadata and statistics",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "sessions"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "dbc368f3-10ec-4508-838c-065944d831e8",
+                            "name": "Successfully retrieved sessions",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "sessions"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"sessions\": [\n    {\n      \"created_at\": \"<string>\",\n      \"current_task\": \"<string>\",\n      \"duration_seconds\": \"<integer>\",\n      \"files_modified\": [\n        \"<string>\",\n        \"<string>\"\n      ],\n      \"git_branch\": \"<string>\",\n      \"git_worktree\": \"<string>\",\n      \"id\": \"<string>\",\n      \"is_active\": \"<boolean>\",\n      \"message_count\": \"<integer>\",\n      \"model\": \"<string>\",\n      \"project_name\": \"<string>\",\n      \"project_path\": \"<string>\",\n      \"status\": \"active\",\n      \"title\": \"<string>\",\n      \"tokens_used\": {\n        \"estimated_cost\": \"<number>\",\n        \"input_tokens\": \"<integer>\",\n        \"output_tokens\": \"<integer>\",\n        \"total_tokens\": \"<integer>\"\n      },\n      \"updated_at\": \"<string>\"\n    },\n    {\n      \"created_at\": \"<string>\",\n      \"current_task\": \"<string>\",\n      \"duration_seconds\": \"<integer>\",\n      \"files_modified\": [\n        \"<string>\",\n        \"<string>\"\n      ],\n      \"git_branch\": \"<string>\",\n      \"git_worktree\": \"<string>\",\n      \"id\": \"<string>\",\n      \"is_active\": \"<boolean>\",\n      \"message_count\": \"<integer>\",\n      \"model\": \"<string>\",\n      \"project_name\": \"<string>\",\n      \"project_path\": \"<string>\",\n      \"status\": \"completed\",\n      \"title\": \"<string>\",\n      \"tokens_used\": {\n        \"estimated_cost\": \"<number>\",\n        \"input_tokens\": \"<integer>\",\n        \"output_tokens\": \"<integer>\",\n        \"total_tokens\": \"<integer>\"\n      },\n      \"updated_at\": \"<string>\"\n    }\n  ],\n  \"total\": \"<integer>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "fecda108-2810-44d7-8edb-be79a18494e9",
+                            "name": "Internal server error",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "sessions"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Internal Server Error",
+                            "code": 500,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"code\": \"<integer>\",\n  \"details\": \"<string>\",\n  \"error\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "af9b995f-79d2-4557-b444-16f4e810b5b8",
+                    "name": "Get active sessions",
+                    "request": {
+                        "name": "Get active sessions",
+                        "description": {
+                            "content": "Retrieve all currently active Claude sessions (working or idle status)",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "sessions",
+                                "active"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "97668bcf-1218-4180-bcca-e7d164279c56",
+                            "name": "Successfully retrieved active sessions",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "sessions",
+                                        "active"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"sessions\": [\n    {\n      \"created_at\": \"<string>\",\n      \"current_task\": \"<string>\",\n      \"duration_seconds\": \"<integer>\",\n      \"files_modified\": [\n        \"<string>\",\n        \"<string>\"\n      ],\n      \"git_branch\": \"<string>\",\n      \"git_worktree\": \"<string>\",\n      \"id\": \"<string>\",\n      \"is_active\": \"<boolean>\",\n      \"message_count\": \"<integer>\",\n      \"model\": \"<string>\",\n      \"project_name\": \"<string>\",\n      \"project_path\": \"<string>\",\n      \"status\": \"active\",\n      \"title\": \"<string>\",\n      \"tokens_used\": {\n        \"estimated_cost\": \"<number>\",\n        \"input_tokens\": \"<integer>\",\n        \"output_tokens\": \"<integer>\",\n        \"total_tokens\": \"<integer>\"\n      },\n      \"updated_at\": \"<string>\"\n    },\n    {\n      \"created_at\": \"<string>\",\n      \"current_task\": \"<string>\",\n      \"duration_seconds\": \"<integer>\",\n      \"files_modified\": [\n        \"<string>\",\n        \"<string>\"\n      ],\n      \"git_branch\": \"<string>\",\n      \"git_worktree\": \"<string>\",\n      \"id\": \"<string>\",\n      \"is_active\": \"<boolean>\",\n      \"message_count\": \"<integer>\",\n      \"model\": \"<string>\",\n      \"project_name\": \"<string>\",\n      \"project_path\": \"<string>\",\n      \"status\": \"completed\",\n      \"title\": \"<string>\",\n      \"tokens_used\": {\n        \"estimated_cost\": \"<number>\",\n        \"input_tokens\": \"<integer>\",\n        \"output_tokens\": \"<integer>\",\n        \"total_tokens\": \"<integer>\"\n      },\n      \"updated_at\": \"<string>\"\n    }\n  ],\n  \"total\": \"<integer>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "e046e8e8-8746-4ed1-9176-699d53d82ec4",
+                            "name": "Internal server error",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "sessions",
+                                        "active"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Internal Server Error",
+                            "code": 500,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"code\": \"<integer>\",\n  \"details\": \"<string>\",\n  \"error\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "a3c58d19-ef5b-4276-90cf-7b320689a195",
+                    "name": "Get recent sessions",
+                    "request": {
+                        "name": "Get recent sessions",
+                        "description": {
+                            "content": "Retrieve the most recent Claude sessions with optional limit",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "sessions",
+                                "recent"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [
+                                {
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "Maximum number of sessions to return",
+                                        "type": "text/plain"
+                                    },
+                                    "key": "limit",
+                                    "value": "10"
+                                }
+                            ],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "a09a2032-dc8f-4c97-af20-fac668b0ea32",
+                            "name": "Successfully retrieved recent sessions",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "sessions",
+                                        "recent"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "Maximum number of sessions to return",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "limit",
+                                            "value": "10"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"limit\": \"<integer>\",\n  \"sessions\": [\n    {\n      \"created_at\": \"<string>\",\n      \"current_task\": \"<string>\",\n      \"duration_seconds\": \"<integer>\",\n      \"files_modified\": [\n        \"<string>\",\n        \"<string>\"\n      ],\n      \"git_branch\": \"<string>\",\n      \"git_worktree\": \"<string>\",\n      \"id\": \"<string>\",\n      \"is_active\": \"<boolean>\",\n      \"message_count\": \"<integer>\",\n      \"model\": \"<string>\",\n      \"project_name\": \"<string>\",\n      \"project_path\": \"<string>\",\n      \"status\": \"completed\",\n      \"title\": \"<string>\",\n      \"tokens_used\": {\n        \"estimated_cost\": \"<number>\",\n        \"input_tokens\": \"<integer>\",\n        \"output_tokens\": \"<integer>\",\n        \"total_tokens\": \"<integer>\"\n      },\n      \"updated_at\": \"<string>\"\n    },\n    {\n      \"created_at\": \"<string>\",\n      \"current_task\": \"<string>\",\n      \"duration_seconds\": \"<integer>\",\n      \"files_modified\": [\n        \"<string>\",\n        \"<string>\"\n      ],\n      \"git_branch\": \"<string>\",\n      \"git_worktree\": \"<string>\",\n      \"id\": \"<string>\",\n      \"is_active\": \"<boolean>\",\n      \"message_count\": \"<integer>\",\n      \"model\": \"<string>\",\n      \"project_name\": \"<string>\",\n      \"project_path\": \"<string>\",\n      \"status\": \"idle\",\n      \"title\": \"<string>\",\n      \"tokens_used\": {\n        \"estimated_cost\": \"<number>\",\n        \"input_tokens\": \"<integer>\",\n        \"output_tokens\": \"<integer>\",\n        \"total_tokens\": \"<integer>\"\n      },\n      \"updated_at\": \"<string>\"\n    }\n  ]\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "e3823a3a-c2d6-42b6-821f-da4295350f0a",
+                            "name": "Internal server error",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "sessions",
+                                        "recent"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [
+                                        {
+                                            "disabled": false,
+                                            "description": {
+                                                "content": "Maximum number of sessions to return",
+                                                "type": "text/plain"
+                                            },
+                                            "key": "limit",
+                                            "value": "10"
+                                        }
+                                    ],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Internal Server Error",
+                            "code": 500,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"code\": \"<integer>\",\n  \"details\": \"<string>\",\n  \"error\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                },
+                {
+                    "id": "08502aaa-22f6-4dd6-9c8b-9b237507e7f5",
+                    "name": "Get session by ID",
+                    "request": {
+                        "name": "Get session by ID",
+                        "description": {
+                            "content": "Retrieve a specific Claude session by its unique identifier",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "sessions",
+                                ":id"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": [
+                                {
+                                    "type": "any",
+                                    "value": "<string>",
+                                    "key": "id",
+                                    "disabled": false,
+                                    "description": {
+                                        "content": "(Required) Session ID",
+                                        "type": "text/plain"
+                                    }
+                                }
+                            ]
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "6ab76d60-b8d8-4321-b6af-b548a711c056",
+                            "name": "Session found",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "sessions",
+                                        ":id"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "OK",
+                            "code": 200,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"created_at\": \"<string>\",\n  \"current_task\": \"<string>\",\n  \"duration_seconds\": \"<integer>\",\n  \"files_modified\": [\n    \"<string>\",\n    \"<string>\"\n  ],\n  \"git_branch\": \"<string>\",\n  \"git_worktree\": \"<string>\",\n  \"id\": \"<string>\",\n  \"is_active\": \"<boolean>\",\n  \"message_count\": \"<integer>\",\n  \"model\": \"<string>\",\n  \"project_name\": \"<string>\",\n  \"project_path\": \"<string>\",\n  \"status\": \"completed\",\n  \"title\": \"<string>\",\n  \"tokens_used\": {\n    \"estimated_cost\": \"<number>\",\n    \"input_tokens\": \"<integer>\",\n    \"output_tokens\": \"<integer>\",\n    \"total_tokens\": \"<integer>\"\n  },\n  \"updated_at\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "07c21052-d4c1-4dc3-b6b9-e870bff00fb6",
+                            "name": "Session not found",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "sessions",
+                                        ":id"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Not Found",
+                            "code": 404,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"code\": \"<integer>\",\n  \"details\": \"<string>\",\n  \"error\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "f1b06277-6845-4dc5-a38e-74b67045c6d2",
+                            "name": "Internal server error",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "sessions",
+                                        ":id"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Internal Server Error",
+                            "code": 500,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"code\": \"<integer>\",\n  \"details\": \"<string>\",\n  \"error\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        },
+        {
+            "name": "WebSocket",
+            "description": "",
+            "item": [
+                {
+                    "id": "3ecceef7-3c7c-4826-a399-f4f30d835995",
+                    "name": "WebSocket endpoint",
+                    "request": {
+                        "name": "WebSocket endpoint",
+                        "description": {
+                            "content": "Establish a WebSocket connection for real-time session updates",
+                            "type": "text/plain"
+                        },
+                        "url": {
+                            "path": [
+                                "ws"
+                            ],
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "query": [],
+                            "variable": []
+                        },
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "method": "GET",
+                        "body": {},
+                        "auth": null
+                    },
+                    "response": [
+                        {
+                            "id": "f651e52e-619c-4927-8f73-9d7730990459",
+                            "name": "WebSocket connection established",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "ws"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Switching Protocols",
+                            "code": 101,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"data\": {},\n  \"session_id\": \"<string>\",\n  \"timestamp\": \"<string>\",\n  \"type\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        },
+                        {
+                            "id": "7b05b46b-9384-49de-85fd-f9cb53b43020",
+                            "name": "Failed to upgrade connection",
+                            "originalRequest": {
+                                "url": {
+                                    "path": [
+                                        "ws"
+                                    ],
+                                    "host": [
+                                        "{{baseUrl}}"
+                                    ],
+                                    "query": [],
+                                    "variable": []
+                                },
+                                "header": [
+                                    {
+                                        "key": "Accept",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "method": "GET",
+                                "body": {}
+                            },
+                            "status": "Bad Request",
+                            "code": 400,
+                            "header": [
+                                {
+                                    "key": "Content-Type",
+                                    "value": "application/json"
+                                }
+                            ],
+                            "body": "{\n  \"code\": \"<integer>\",\n  \"details\": \"<string>\",\n  \"error\": \"<string>\"\n}",
+                            "cookie": [],
+                            "_postman_previewlanguage": "json"
+                        }
+                    ],
+                    "event": [],
+                    "protocolProfileBehavior": {
+                        "disableBodyPruning": true
+                    }
+                }
+            ]
+        }
+    ],
+    "event": [],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:8080/api/v1"
+        }
+    ],
+    "info": {
+        "_postman_id": "25bd81b6-455e-45da-9e24-957cf3fd9eca",
+        "name": "Claude Session Manager API",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        "description": {
+            "content": "A comprehensive API for managing and monitoring Claude.ai sessions with real-time analytics and insights.\n\nContact Support:\n Name: Claude Session Manager Support\n Email: support@claude-session-manager.com",
+            "type": "text/plain"
+        }
+    }
+}
