@@ -809,15 +809,15 @@ func (r *SessionRepository) GetSessionTokenTimeline(sessionID string, granularit
 	query := `
 		SELECT 
 			strftime(?, m.timestamp) as timestamp,
-			SUM(tu.input_tokens) as input_tokens,
-			SUM(tu.output_tokens) as output_tokens,
-			SUM(tu.cache_creation_input_tokens) as cache_creation_tokens,
-			SUM(tu.cache_read_input_tokens) as cache_read_tokens,
-			SUM(tu.input_tokens + tu.output_tokens + tu.cache_creation_input_tokens + tu.cache_read_input_tokens) as total_tokens,
-			SUM(tu.estimated_cost) as estimated_cost,
+			COALESCE(SUM(tu.input_tokens), 0) as input_tokens,
+			COALESCE(SUM(tu.output_tokens), 0) as output_tokens,
+			COALESCE(SUM(tu.cache_creation_input_tokens), 0) as cache_creation_tokens,
+			COALESCE(SUM(tu.cache_read_input_tokens), 0) as cache_read_tokens,
+			COALESCE(SUM(tu.input_tokens + tu.output_tokens + tu.cache_creation_input_tokens + tu.cache_read_input_tokens), 0) as total_tokens,
+			COALESCE(SUM(tu.estimated_cost), 0.0) as estimated_cost,
 			COUNT(DISTINCT m.id) as message_count
 		FROM messages m
-		JOIN token_usage tu ON m.id = tu.message_id
+		LEFT JOIN token_usage tu ON m.id = tu.message_id
 		WHERE m.session_id = ?
 		GROUP BY strftime(?, m.timestamp)
 		ORDER BY timestamp ASC

@@ -185,7 +185,7 @@ func (s *Server) setupFileWatcher() error {
 		messageType := ""
 		switch event.Type {
 		case "created":
-			messageType = "session_new"
+			messageType = "session_created"
 		case "modified":
 			messageType = "session_update"
 		case "deleted":

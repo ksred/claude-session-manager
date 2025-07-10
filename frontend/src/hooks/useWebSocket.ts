@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { WebSocketMessage } from '../types/api';
 import { sessionKeys } from './useSessionData';
+import { createDebouncedInvalidator } from '../utils/debounce';
 
 const WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/ws`;
 const RECONNECT_INTERVAL = 3000;
 const MAX_RECONNECT_ATTEMPTS = 5;
+const INVALIDATION_DELAY = 5000; // 5 seconds debounce for all invalidations
 
 export const useWebSocket = () => {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
@@ -14,6 +16,7 @@ export const useWebSocket = () => {
   const reconnectCountRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const queryClient = useQueryClient();
+  const debouncedInvalidator = useRef(createDebouncedInvalidator(INVALIDATION_DELAY));
 
   const connect = useCallback(() => {
     try {
@@ -100,22 +103,49 @@ export const useWebSocket = () => {
                     );
                     
                     // Invalidate metrics to include the new session
-                    queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
+                    debouncedInvalidator.current.debounceInvalidation(
+                      'metrics',
+                      () => queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() })
+                    );
                   }).catch(error => {
                     console.error('❌ Failed to fetch new session data:', error);
                     // Fall back to invalidating queries if fetch fails
-                    queryClient.invalidateQueries({ queryKey: sessionKeys.all });
-                    queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
-                    queryClient.invalidateQueries({ queryKey: sessionKeys.active() });
-                    queryClient.invalidateQueries({ queryKey: sessionKeys.recent() });
+                    debouncedInvalidator.current.debounceInvalidation(
+                      'sessions-all',
+                      () => queryClient.invalidateQueries({ queryKey: sessionKeys.all })
+                    );
+                    debouncedInvalidator.current.debounceInvalidation(
+                      'metrics',
+                      () => queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() })
+                    );
+                    debouncedInvalidator.current.debounceInvalidation(
+                      'sessions-active',
+                      () => queryClient.invalidateQueries({ queryKey: sessionKeys.active() })
+                    );
+                    debouncedInvalidator.current.debounceInvalidation(
+                      'sessions-recent',
+                      () => queryClient.invalidateQueries({ queryKey: sessionKeys.recent() })
+                    );
                   });
                 });
               } else {
                 // Fall back if no session_id provided
-                queryClient.invalidateQueries({ queryKey: sessionKeys.all });
-                queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
-                queryClient.invalidateQueries({ queryKey: sessionKeys.active() });
-                queryClient.invalidateQueries({ queryKey: sessionKeys.recent() });
+                debouncedInvalidator.current.debounceInvalidation(
+                  'sessions-all',
+                  () => queryClient.invalidateQueries({ queryKey: sessionKeys.all })
+                );
+                debouncedInvalidator.current.debounceInvalidation(
+                  'metrics',
+                  () => queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() })
+                );
+                debouncedInvalidator.current.debounceInvalidation(
+                  'sessions-active',
+                  () => queryClient.invalidateQueries({ queryKey: sessionKeys.active() })
+                );
+                debouncedInvalidator.current.debounceInvalidation(
+                  'sessions-recent',
+                  () => queryClient.invalidateQueries({ queryKey: sessionKeys.recent() })
+                );
               }
               break;
               
@@ -187,18 +217,32 @@ export const useWebSocket = () => {
                       }
                     );
                     
-                    // Invalidate metrics to reflect new token usage and costs
-                    queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
+                    // Debounce metrics invalidation
+                    debouncedInvalidator.current.debounceInvalidation(
+                      'metrics',
+                      () => queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() })
+                    );
                     
-                    // Invalidate token timeline for this session
-                    queryClient.invalidateQueries({ 
-                      queryKey: sessionKeys.sessionTokenTimeline(sessionId) 
-                    });
+                    // Debounce timeline invalidation to prevent excessive API calls
+                    debouncedInvalidator.current.debounceInvalidation(
+                      `session-timeline-${sessionId}`,
+                      () => {
+                        queryClient.invalidateQueries({ 
+                          queryKey: sessionKeys.sessionTokenTimeline(sessionId) 
+                        });
+                      }
+                    );
                   }).catch(error => {
                     console.error('❌ Failed to fetch updated session data:', error);
                     // Fall back to invalidating queries if fetch fails
-                    queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-                    queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+                    debouncedInvalidator.current.debounceInvalidation(
+                      `session-detail-${sessionId}`,
+                      () => queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) })
+                    );
+                    debouncedInvalidator.current.debounceInvalidation(
+                      'sessions-all',
+                      () => queryClient.invalidateQueries({ queryKey: sessionKeys.all })
+                    );
                   });
                 });
               }
@@ -206,17 +250,29 @@ export const useWebSocket = () => {
               
             case 'session_deleted':
               // Session deleted
-              queryClient.invalidateQueries({ queryKey: sessionKeys.all });
-              queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
+              debouncedInvalidator.current.debounceInvalidation(
+                'sessions-all',
+                () => queryClient.invalidateQueries({ queryKey: sessionKeys.all })
+              );
+              debouncedInvalidator.current.debounceInvalidation(
+                'metrics',
+                () => queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() })
+              );
               break;
               
             case 'activity_update':
               // Invalidate activity data
-              queryClient.invalidateQueries({ queryKey: sessionKeys.activity() });
+              debouncedInvalidator.current.debounceInvalidation(
+                'activity',
+                () => queryClient.invalidateQueries({ queryKey: sessionKeys.activity() })
+              );
               
               // If it's a file modification, also update recent files
               if (message.data?.activity?.type === 'file_modified') {
-                queryClient.invalidateQueries({ queryKey: ['files', 'recent'] });
+                debouncedInvalidator.current.debounceInvalidation(
+                  'files-recent',
+                  () => queryClient.invalidateQueries({ queryKey: ['files', 'recent'] })
+                );
               }
               break;
               
@@ -250,10 +306,15 @@ export const useWebSocket = () => {
                       }
                     );
                     
-                    // Invalidate token timeline for this session
-                    queryClient.invalidateQueries({ 
-                      queryKey: sessionKeys.sessionTokenTimeline(sessionId) 
-                    });
+                    // Debounce timeline invalidation to prevent excessive API calls
+                    debouncedInvalidator.current.debounceInvalidation(
+                      `session-timeline-${sessionId}`,
+                      () => {
+                        queryClient.invalidateQueries({ 
+                          queryKey: sessionKeys.sessionTokenTimeline(sessionId) 
+                        });
+                      }
+                    );
                   }).catch(error => {
                     console.error('❌ Failed to fetch session after metrics update:', error);
                   });
@@ -261,8 +322,14 @@ export const useWebSocket = () => {
               }
               
               // Always invalidate general metrics
-              queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
-              queryClient.invalidateQueries({ queryKey: sessionKeys.usage() });
+              debouncedInvalidator.current.debounceInvalidation(
+                'metrics',
+                () => queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() })
+              );
+              debouncedInvalidator.current.debounceInvalidation(
+                'usage',
+                () => queryClient.invalidateQueries({ queryKey: sessionKeys.usage() })
+              );
               break;
               
             case 'pong':
@@ -355,6 +422,8 @@ export const useWebSocket = () => {
       clearTimeout(connectTimeout);
       clearInterval(pingInterval);
       disconnect();
+      // Clear all pending invalidations
+      debouncedInvalidator.current.clearAll();
     };
   }, []); // Remove dependencies to prevent reconnect loops
 
