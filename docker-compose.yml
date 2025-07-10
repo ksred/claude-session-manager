@@ -1,37 +1,52 @@
 version: '3.8'
 
 services:
-  backend:
+  # Single container with both services
+  claude-session-manager:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "80:80"
     volumes:
       - ~/.claude:/root/.claude:ro
     environment:
       - PORT=8080
-      - ENV=development
-    networks:
-      - claude-network
+      - ENV=production
+    restart: unless-stopped
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: development
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
-    environment:
-      - VITE_API_URL=http://backend:8080
-    depends_on:
-      - backend
-    networks:
-      - claude-network
+  # Alternative: Separate containers (commented out by default)
+  # backend:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ~/.claude:/root/.claude:ro
+  #   environment:
+  #     - PORT=8080
+  #     - ENV=development
+  #   networks:
+  #     - claude-network
 
-networks:
-  claude-network:
-    driver: bridge
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #     target: development
+  #   ports:
+  #     - "5173:5173"
+  #   volumes:
+  #     - ./frontend/src:/app/src
+  #     - ./frontend/public:/app/public
+  #   environment:
+  #     - VITE_API_URL=http://backend:8080
+  #   depends_on:
+  #     - backend
+  #   networks:
+  #     - claude-network
+
+# networks:
+#   claude-network:
+#     driver: bridge
