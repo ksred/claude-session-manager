@@ -663,9 +663,23 @@ func (h *SQLiteHandlers) GetSessionTokenTimelineHandler(c *gin.Context) {
 		return
 	}
 
+	// If no timeline data, check if session exists
 	if len(timeline) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Session not found or has no token usage",
+		// Verify if the session actually exists
+		_, err := h.repo.GetSessionByID(sessionID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error": "Session not found",
+			})
+			return
+		}
+		
+		// Session exists but has no token usage data yet - return empty timeline
+		c.JSON(http.StatusOK, gin.H{
+			"session_id":  sessionID,
+			"timeline":    []interface{}{},
+			"granularity": granularity,
+			"total":       0,
 		})
 		return
 	}
