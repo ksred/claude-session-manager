@@ -1,4 +1,4 @@
-package database
+THIS SHOULD BE A LINTER ERRORpackage database
 
 import (
 	"database/sql"
@@ -461,7 +461,14 @@ func (r *SessionRepository) GetSessionActivity(sessionID string, limit int) ([]*
 			FROM activity_log al
 			WHERE al.session_id = ?
 		)
-		SELECT DISTINCT * FROM combined_activity
+		SELECT 
+			COALESCE(id, ROW_NUMBER() OVER (ORDER BY timestamp DESC)) as id,
+			session_id,
+			activity_type,
+			details,
+			timestamp,
+			created_at
+		FROM combined_activity
 		ORDER BY timestamp DESC
 		LIMIT ?
 	`
@@ -560,7 +567,14 @@ func (r *SessionRepository) GetProjectActivity(projectName string, limit int) ([
 			FROM activity_log al
 			WHERE al.session_id IN (SELECT id FROM project_sessions)
 		)
-		SELECT DISTINCT * FROM combined_activity
+		SELECT 
+			COALESCE(id, ROW_NUMBER() OVER (ORDER BY timestamp DESC)) as id,
+			session_id,
+			activity_type,
+			details,
+			timestamp,
+			created_at
+		FROM combined_activity
 		ORDER BY timestamp DESC
 		LIMIT ?
 	`
@@ -793,22 +807,43 @@ func (r *SessionRepository) GetTokenTimeline(hours int, granularity string) ([]T
 
 // GetSessionTokenTimeline returns token usage over time for a specific session
 func (r *SessionRepository) GetSessionTokenTimeline(sessionID string, granularity string) ([]TokenTimelineEntry, error) {
-	// Determine the time format based on granularity
-	var timeFormat string
+	// Determine the time format and increment based on granularity
+	var timeFormat, increment string
 	switch granularity {
 	case "minute":
 		timeFormat = "%Y-%m-%d %H:%M:00"
+		increment = "1 minute"
 	case "hour":
 		timeFormat = "%Y-%m-%d %H:00:00"
+		increment = "1 hour"
 	case "day":
 		timeFormat = "%Y-%m-%d 00:00:00"
+		increment = "1 day"
 	default:
 		timeFormat = "%Y-%m-%d %H:%M:00" // Default to minute for session view
+		increment = "1 minute"
 	}
 
 	query := `
+		WITH session_bounds AS (
+			SELECT 
+				MIN(timestamp) as start_time,
+				MAX(timestamp) as end_time
+			FROM messages 
+			WHERE session_id = ?
+		),
+		time_series AS (
+			WITH RECURSIVE time_buckets(bucket_time) AS (
+				SELECT strftime(?, (SELECT start_time FROM session_bounds))
+				UNION ALL
+				SELECT strftime(?, datetime(bucket_time, ?))
+				FROM time_buckets
+				WHERE datetime(bucket_time, ?) <= (SELECT end_time FROM session_bounds)
+			)
+			SELECT bucket_time as timestamp FROM time_buckets
+		)
 		SELECT 
-			strftime(?, m.timestamp) as timestamp,
+			ts.timestamp,
 			COALESCE(SUM(tu.input_tokens), 0) as input_tokens,
 			COALESCE(SUM(tu.output_tokens), 0) as output_tokens,
 			COALESCE(SUM(tu.cache_creation_input_tokens), 0) as cache_creation_tokens,
@@ -816,15 +851,15 @@ func (r *SessionRepository) GetSessionTokenTimeline(sessionID string, granularit
 			COALESCE(SUM(tu.input_tokens + tu.output_tokens + tu.cache_creation_input_tokens + tu.cache_read_input_tokens), 0) as total_tokens,
 			COALESCE(SUM(tu.estimated_cost), 0.0) as estimated_cost,
 			COUNT(DISTINCT m.id) as message_count
-		FROM messages m
+		FROM time_series ts
+		LEFT JOIN messages m ON strftime(?, m.timestamp) = ts.timestamp AND m.session_id = ?
 		LEFT JOIN token_usage tu ON m.id = tu.message_id
-		WHERE m.session_id = ?
-		GROUP BY strftime(?, m.timestamp)
-		ORDER BY timestamp ASC
+		GROUP BY ts.timestamp
+		ORDER BY ts.timestamp ASC
 	`
 
 	var entries []TokenTimelineEntry
-	err := r.db.Select(&entries, query, timeFormat, sessionID, timeFormat)
+	err := r.db.Select(&entries, query, sessionID, timeFormat, timeFormat, increment, increment, timeFormat, sessionID)
 	return entries, err
 }
 
