@@ -107,7 +107,7 @@ deps:
 .PHONY: run
 run:
 	@echo "Running $(BINARY_NAME)..."
-	$(GOCMD) run $(CMD_DIR) serve
+	$(GOCMD) run $(CMD_DIR) serve --debug
 
 # Run with build
 .PHONY: run-build

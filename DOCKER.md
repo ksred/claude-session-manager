@@ -14,7 +14,7 @@ docker build -t ksred/claude-session-manager .
 docker run -d \
   --name claude-session-manager \
   -p 80:80 \
-  -v ~/.claude:/root/.claude:ro \
+  -v ~/.claude:/data/claude \
   ksred/claude-session-manager
 ```
 
@@ -39,7 +39,7 @@ The Docker container includes:
 - **Backend API**: Go-based API server running on port 8080 internally
 - **Frontend**: React-based web interface served by nginx on port 80
 - **Process Manager**: Supervisor to manage both services
-- **Volume Mount**: Read-only access to your `~/.claude` directory
+- **Volume Mount**: Access to your `~/.claude` directory (mounted at `/data/claude`)
 
 ## Architecture
 
@@ -63,7 +63,7 @@ The container uses:
 
 ## Volume Mounts
 
-- `~/.claude:/root/.claude:ro` - Read-only mount of your Claude session data
+- `~/.claude:/data/claude` - Mount of your Claude session data (read-write for database)
 
 ## Building from Source
 
@@ -79,7 +79,7 @@ docker build -t claude-session-manager .
 docker run -d \
   --name claude-session-manager \
   -p 80:80 \
-  -v ~/.claude:/root/.claude:ro \
+  -v ~/.claude:/data/claude \
   claude-session-manager
 ```
 
@@ -103,7 +103,7 @@ docker logs claude-session-manager
 
 ## Security Notes
 
-- The container runs with read-only access to your Claude session data
+- The container needs read-write access to store the SQLite database in your Claude directory
 - Both services run as non-privileged users where possible
 - The frontend is served with security headers enabled
 - All API requests are proxied through nginx
@@ -116,7 +116,7 @@ docker logs claude-session-manager
 docker run -d \
   --name claude-session-manager \
   -p 8080:80 \
-  -v ~/.claude:/root/.claude:ro \
+  -v ~/.claude:/data/claude \
   ksred/claude-session-manager
 ```
 
@@ -128,7 +128,7 @@ Access at http://localhost:8080
 docker run -d \
   --name claude-session-manager \
   -p 80:80 \
-  -v /path/to/your/claude/dir:/root/.claude:ro \
+  -v /path/to/your/claude/dir:/data/claude \
   ksred/claude-session-manager
 ```
 

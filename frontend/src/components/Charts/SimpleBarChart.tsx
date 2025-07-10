@@ -11,18 +11,40 @@ interface SimpleBarChartProps {
   onTimeGranularityChange?: (granularity: 'hour' | 'day') => void;
   showControls?: boolean;
   className?: string;
+  isLoading?: boolean;
 }
 
 export const SimpleBarChart: React.FC<SimpleBarChartProps> = ({
   data,
   title = "Token Usage",
-  timeRange = 24,
+  timeRange = 168,
   timeGranularity = 'hour',
   onTimeRangeChange,
   onTimeGranularityChange,
   showControls = false,
-  className
+  className,
+  isLoading = false
 }) => {
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className={cn("activity-card", className)}>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-sm font-semibold text-white flex items-center">
+            <span className="mr-2">🔥</span>
+            {title}
+          </h3>
+        </div>
+        <div className="h-48 flex items-center justify-center">
+          <div className="flex items-center gap-2 text-gray-400">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+            <span>Loading chart data...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
   // Filter out invalid data points and ensure we have valid values
   const validData = data.filter(d => d && typeof d.value === 'number');
   

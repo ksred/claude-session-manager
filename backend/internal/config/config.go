@@ -63,8 +63,13 @@ type FeaturesConfig struct {
 
 // DefaultConfig returns the default configuration
 func DefaultConfig() *Config {
-	homeDir, _ := os.UserHomeDir()
-	claudeDir := filepath.Join(homeDir, ".claude")
+	// Check for CLAUDE_DIR environment variable first
+	claudeDir := os.Getenv("CLAUDE_DIR")
+	if claudeDir == "" {
+		// Fall back to ~/.claude if not set
+		homeDir, _ := os.UserHomeDir()
+		claudeDir = filepath.Join(homeDir, ".claude")
+	}
 	
 	return &Config{
 		Server: ServerConfig{

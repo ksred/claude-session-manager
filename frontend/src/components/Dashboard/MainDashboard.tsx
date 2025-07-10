@@ -13,6 +13,7 @@ interface MainDashboardProps {
   recentActivity: ActivityEntry[];
   chartData: ChartDataPoint[];
   lineChartData?: LineChartDataPoint[];
+  isChartLoading?: boolean;
   timeRange: number;
   timeGranularity: 'hour' | 'day';
   onTimeRangeChange: (hours: number) => void;
@@ -26,6 +27,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
   recentActivity,
   chartData,
   lineChartData,
+  isChartLoading = false,
   timeRange,
   timeGranularity,
   onTimeRangeChange,
@@ -48,6 +50,7 @@ export const MainDashboard: React.FC<MainDashboardProps> = ({
       <SimpleBarChart 
         data={chartData}
         title="Token Usage"
+        isLoading={isChartLoading}
         timeRange={timeRange}
         timeGranularity={timeGranularity}
         onTimeRangeChange={onTimeRangeChange}

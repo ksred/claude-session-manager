@@ -8,6 +8,8 @@ export const sessionKeys = {
   list: (filters: Record<string, any>) => [...sessionKeys.lists(), { filters }] as const,
   details: () => [...sessionKeys.all, 'detail'] as const,
   detail: (id: string) => [...sessionKeys.details(), id] as const,
+  active: () => [...sessionKeys.lists(), { active: true }] as const,
+  recent: () => [...sessionKeys.lists(), { recent: true }] as const,
   metrics: () => ['metrics'] as const,
   activity: () => ['activity'] as const,
   usage: () => ['usage'] as const,
@@ -18,6 +20,8 @@ export const sessionKeys = {
 
 // Get all sessions
 export const useAllSessions = () => {
+  const queryClient = useQueryClient();
+  
   return useQuery({
     queryKey: sessionKeys.list({}),
     queryFn: sessionService.getAllSessions,
@@ -25,6 +29,36 @@ export const useAllSessions = () => {
     refetchInterval: 60000, // 1 minute
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    // Preserve existing order when updating to prevent flashing
+    select: (data) => {
+      const previousData = queryClient.getQueryData(sessionKeys.list({})) as typeof data;
+      if (!previousData || !data) return data;
+      
+      // Create a map of session IDs to their current index
+      const orderMap = new Map<string, number>();
+      previousData.sessions?.forEach((session, index) => {
+        orderMap.set(session.id, index);
+      });
+      
+      // Sort new sessions to maintain previous order where possible
+      const sortedSessions = [...(data.sessions || [])].sort((a, b) => {
+        const aIndex = orderMap.get(a.id) ?? Infinity;
+        const bIndex = orderMap.get(b.id) ?? Infinity;
+        
+        // If both sessions existed before, maintain their order
+        if (aIndex !== Infinity && bIndex !== Infinity) {
+          return aIndex - bIndex;
+        }
+        
+        // If one is new, sort by last_activity
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      });
+      
+      return {
+        ...data,
+        sessions: sortedSessions
+      };
+    }
   });
 };
 
@@ -91,6 +125,28 @@ export const useActivity = (limit: number = 50) => {
     staleTime: 15000, // 15 seconds
     refetchInterval: 30000, // 30 seconds
     retry: 3,
+  });
+};
+
+// Get session-specific activity
+export const useSessionActivity = (sessionId: string | undefined, limit: number = 50) => {
+  return useQuery({
+    queryKey: ['activity', 'session', sessionId, limit],
+    queryFn: () => sessionService.getSessionActivity(sessionId!, limit),
+    enabled: !!sessionId,
+    staleTime: 30000, // 30 seconds
+    refetchInterval: 60000, // 1 minute
+  });
+};
+
+// Get project-specific activity
+export const useProjectActivity = (projectName: string | undefined, limit: number = 50) => {
+  return useQuery({
+    queryKey: ['activity', 'project', projectName, limit],
+    queryFn: () => sessionService.getProjectActivity(projectName!, limit),
+    enabled: !!projectName,
+    staleTime: 30000, // 30 seconds
+    refetchInterval: 60000, // 1 minute
   });
 };
 

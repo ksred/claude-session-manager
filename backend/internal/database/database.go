@@ -127,6 +127,11 @@ func (db *Database) applySchemaUpdates() error {
 			definition:   "TEXT",
 			defaultValue: "NULL",
 		},
+		{
+			name:         "last_processed_position",
+			definition:   "INTEGER DEFAULT 0",
+			defaultValue: "0",
+		},
 	}
 
 	// Check and add each column if it doesn't exist

@@ -26,6 +26,7 @@ type SQLiteServer struct {
 	sqliteHandlers *SQLiteHandlers
 	ctx            context.Context
 	cancel         context.CancelFunc
+	httpServer     *http.Server
 }
 
 // NewSQLiteServer creates a new API server instance using SQLite
@@ -40,7 +41,7 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 	router := gin.New()
 	logger := logrus.StandardLogger()
 
-	// Create database
+	// Create database in the Claude directory
 	dbPath := filepath.Join(cfg.Claude.HomeDirectory, "sessions.db")
 	db, err := database.NewDatabase(database.Config{
 		DatabasePath: dbPath,
@@ -75,11 +76,16 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 
 	// Start WebSocket hub if enabled
 	if server.wsHub != nil {
-		go server.wsHub.Run()
+		go func() {
+			logger.Info("WebSocket hub goroutine started")
+			server.wsHub.Run(ctx)
+			logger.Info("WebSocket hub goroutine exited")
+		}()
 	}
 
 	// Import existing data (this can take a while) - run in background
 	go func() {
+		logger.Info("Import goroutine started")
 		logger.Info("Starting background import of existing session data (press Ctrl+C to cancel)")
 		if err := server.importExistingData(); err != nil {
 			if err == context.Canceled {
@@ -90,16 +96,31 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 		} else {
 			logger.Info("Background import completed - all historical sessions loaded")
 		}
+		logger.Info("Import goroutine exited")
 	}()
 
 	// Setup file watcher if enabled - but start it after import to avoid database locks
 	if cfg.Features.EnableFileWatcher {
 		go func() {
+			logger.Info("File watcher setup goroutine started")
 			// Wait for import to finish before starting file watcher
-			time.Sleep(2 * time.Minute) // Give import time to complete
-			logger.Info("Starting file watcher after import delay")
-			if err := server.setupFileWatcher(); err != nil {
-				logger.WithError(err).Error("Failed to setup file watcher")
+			select {
+			case <-ctx.Done():
+				logger.Info("File watcher setup cancelled due to shutdown")
+				logger.Info("File watcher setup goroutine exited")
+				return
+			case <-time.After(2 * time.Minute):
+				// Check context again before proceeding
+				if ctx.Err() != nil {
+					logger.Info("File watcher setup cancelled due to shutdown")
+					logger.Info("File watcher setup goroutine exited")
+					return
+				}
+				logger.Info("Starting file watcher after import delay")
+				if err := server.setupFileWatcher(); err != nil {
+					logger.WithError(err).Error("Failed to setup file watcher")
+				}
+				logger.Info("File watcher setup goroutine exited")
 			}
 		}()
 	}
@@ -123,14 +144,18 @@ func (s *SQLiteServer) Start() error {
 	}).Info("Starting Claude Session Manager API server")
 
 	// Configure timeouts
-	server := &http.Server{
+	s.httpServer = &http.Server{
 		Addr:         addr,
 		Handler:      s.router,
 		ReadTimeout:  time.Duration(s.config.Server.ReadTimeout) * time.Second,
 		WriteTimeout: time.Duration(s.config.Server.WriteTimeout) * time.Second,
 	}
 
-	return server.ListenAndServe()
+	// ListenAndServe is blocking, so the caller should handle it appropriately
+	s.logger.Debug("Calling httpServer.ListenAndServe()...")
+	err := s.httpServer.ListenAndServe()
+	s.logger.WithError(err).Info("httpServer.ListenAndServe() returned")
+	return err
 }
 
 // setupMiddleware configures all middleware
@@ -162,6 +187,8 @@ func (s *SQLiteServer) setupRoutes() {
 			sessions.GET("/:id", s.sqliteHandlers.GetSessionHandler)
 			sessions.GET("/active", s.sqliteHandlers.GetActiveSessionsHandler)
 			sessions.GET("/recent", s.sqliteHandlers.GetRecentSessionsHandler)
+			sessions.GET("/:id/tokens/timeline", s.sqliteHandlers.GetSessionTokenTimelineHandler)
+			sessions.GET("/:id/activity", s.sqliteHandlers.GetSessionActivityHandler)
 		}
 
 		// Metrics routes using SQLite handlers
@@ -185,6 +212,14 @@ func (s *SQLiteServer) setupRoutes() {
 		projects := v1.Group("/projects")
 		{
 			projects.GET("/:projectName/files/recent", s.sqliteHandlers.GetProjectRecentFilesHandler)
+			projects.GET("/:projectName/tokens/timeline", s.sqliteHandlers.GetProjectTokenTimelineHandler)
+			projects.GET("/:projectName/activity", s.sqliteHandlers.GetProjectActivityHandler)
+		}
+
+		// Analytics routes
+		analytics := v1.Group("/analytics")
+		{
+			analytics.GET("/tokens/timeline", s.sqliteHandlers.GetTokenTimelineHandler)
 		}
 
 		// WebSocket endpoint for real-time updates
@@ -288,6 +323,13 @@ func (s *SQLiteServer) setupFileWatcher() error {
 		return fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
+	// Set up WebSocket update callback if WebSocket is enabled
+	if s.wsHub != nil {
+		wsAdapter := NewWebSocketUpdateAdapter(s.wsHub, s.sessionRepo, s.logger)
+		s.fileWatcher.SetUpdateCallback(wsAdapter)
+		s.logger.Info("WebSocket update adapter connected to file watcher")
+	}
+
 	// Start the file watcher
 	if err := s.fileWatcher.Start(s.ctx); err != nil {
 		return fmt.Errorf("failed to start file watcher: %w", err)
@@ -299,32 +341,64 @@ func (s *SQLiteServer) setupFileWatcher() error {
 
 // Stop gracefully stops the server
 func (s *SQLiteServer) Stop() error {
-	s.logger.Info("Stopping Claude Session Manager server")
+	s.logger.Info("Starting server shutdown sequence")
+
+	// Create shutdown context with timeout from config
+	shutdownTimeout := time.Duration(s.config.Server.ShutdownTimeout) * time.Second
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer shutdownCancel()
+
+	// Shutdown HTTP server gracefully
+	if s.httpServer != nil {
+		s.logger.Info("Step 1/5: Shutting down HTTP server...")
+		if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
+			s.logger.WithError(err).Error("HTTP server shutdown error")
+			// Force close if graceful shutdown fails
+			if closeErr := s.httpServer.Close(); closeErr != nil {
+				s.logger.WithError(closeErr).Error("HTTP server force close error")
+			}
+		} else {
+			s.logger.Info("HTTP server shutdown completed successfully")
+		}
+	}
 
 	// Cancel context to stop background processes
+	s.logger.Info("Step 2/5: Cancelling background contexts...")
 	if s.cancel != nil {
 		s.cancel()
+		s.logger.Info("Context cancelled - background goroutines should stop")
 	}
 
 	// Stop file watcher
+	s.logger.Info("Step 3/5: Stopping file watcher...")
 	if s.fileWatcher != nil {
 		s.fileWatcher.Stop()
+		s.logger.Info("File watcher stopped")
+	} else {
+		s.logger.Info("No file watcher to stop")
 	}
 
 	// Stop WebSocket hub (note: WebSocketHub doesn't have a Stop method, just close channels)
+	s.logger.Info("Step 4/5: WebSocket hub status...")
 	if s.wsHub != nil {
-		// WebSocket hub will be stopped when context is cancelled
+		s.logger.Info("WebSocket hub should stop via context cancellation")
+		// Give it a moment to clean up
+		time.Sleep(100 * time.Millisecond)
+	} else {
+		s.logger.Info("No WebSocket hub to stop")
 	}
 
 	// Close database
+	s.logger.Info("Step 5/5: Closing database...")
 	if s.db != nil {
 		if err := s.db.Close(); err != nil {
 			s.logger.WithError(err).Error("Failed to close database")
 			return err
 		}
+		s.logger.Info("Database closed successfully")
 	}
 
-	s.logger.Info("Server stopped successfully")
+	s.logger.Info("Server shutdown sequence completed")
 	return nil
 }
 

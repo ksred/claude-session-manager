@@ -251,18 +251,45 @@ func (i *Importer) parseProjectPath(encodedPath string) ProjectInfo {
 
 // JSONLMessage represents a message from the JSONL file
 type JSONLMessage struct {
-	ParentUUID    *string                `json:"parentUuid"`
-	IsSidechain   bool                   `json:"isSidechain"`
-	UserType      string                 `json:"userType"`
-	CWD           string                 `json:"cwd"`
-	SessionID     string                 `json:"sessionId"`
-	Version       string                 `json:"version"`
-	Type          string                 `json:"type"`
-	Message       MessageContent         `json:"message"`
-	UUID          string                 `json:"uuid"`
-	Timestamp     time.Time              `json:"timestamp"`
-	RequestID     *string                `json:"requestId,omitempty"`
-	ToolUseResult map[string]interface{} `json:"toolUseResult,omitempty"`
+	ParentUUID    *string         `json:"parentUuid"`
+	IsSidechain   bool            `json:"isSidechain"`
+	UserType      string          `json:"userType"`
+	CWD           string          `json:"cwd"`
+	SessionID     string          `json:"sessionId"`
+	Version       string          `json:"version"`
+	Type          string          `json:"type"`
+	Message       MessageContent  `json:"message"`
+	UUID          string          `json:"uuid"`
+	Timestamp     time.Time       `json:"timestamp"`
+	RequestID     *string         `json:"requestId,omitempty"`
+	ToolUseResult *FlexibleResult `json:"toolUseResult,omitempty"`
+}
+
+// FlexibleResult handles toolUseResult that can be either a string or a map
+type FlexibleResult struct {
+	Value map[string]interface{}
+}
+
+// UnmarshalJSON implements custom unmarshaling for FlexibleResult
+func (f *FlexibleResult) UnmarshalJSON(data []byte) error {
+	// Try to unmarshal as map first
+	var m map[string]interface{}
+	if err := json.Unmarshal(data, &m); err == nil {
+		f.Value = m
+		return nil
+	}
+	
+	// If that fails, try as string and wrap it
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		f.Value = map[string]interface{}{
+			"result": s,
+		}
+		return nil
+	}
+	
+	// If both fail, return the original error
+	return fmt.Errorf("toolUseResult must be either a map or a string")
 }
 
 // MessageContent represents the content of a message
@@ -511,8 +538,8 @@ func (i *Importer) importSession(sessionID string, messages []JSONLMessage, proj
 		}
 
 		// Also handle legacy tool use results if present
-		if msg.ToolUseResult != nil {
-			resultBytes, err := json.Marshal(msg.ToolUseResult)
+		if msg.ToolUseResult != nil && msg.ToolUseResult.Value != nil {
+			resultBytes, err := json.Marshal(msg.ToolUseResult.Value)
 			if err != nil {
 				i.logger.WithError(err).Warn("Failed to marshal tool result")
 				continue
@@ -520,13 +547,13 @@ func (i *Importer) importSession(sessionID string, messages []JSONLMessage, proj
 
 			// Extract file path if available
 			var filePath *string
-			if fp, ok := msg.ToolUseResult["file_path"].(string); ok {
+			if fp, ok := msg.ToolUseResult.Value["file_path"].(string); ok {
 				filePath = &fp
 			}
 
 			// Extract tool name if available
 			toolName := "unknown"
-			if tn, ok := msg.ToolUseResult["tool_name"].(string); ok {
+			if tn, ok := msg.ToolUseResult.Value["tool_name"].(string); ok {
 				toolName = tn
 			}
 
@@ -545,35 +572,60 @@ func (i *Importer) importSession(sessionID string, messages []JSONLMessage, proj
 		}
 	}
 
-	// Log activity
-	activity := &ActivityLogEntry{
-		SessionID:    &sessionID,
-		ActivityType: "session_imported",
-		Details:      fmt.Sprintf("Imported session with %d messages", len(messages)),
-		Timestamp:    time.Now(),
-	}
-	
-	if err := i.repo.LogActivity(activity); err != nil {
-		i.logger.WithError(err).Warn("Failed to log activity")
-	}
+	// Don't log import activity - it clutters the activity timeline
+	// Only log real user activities like messages and file modifications
 
 	return nil
 }
 
 // calculateTokenCost estimates the cost based on token usage and model
 func (i *Importer) calculateTokenCost(usage *TokenUsage, model string) float64 {
-	// Default pricing (Claude 3 Opus)
-	const (
-		inputCostPer1M              = 15.0
-		outputCostPer1M             = 75.0
-		cacheReadCostPer1M          = 1.50
-		cacheCreationCostPer1M      = 18.75
-	)
+	// Pricing per million tokens based on model
+	var inputCostPer1M, outputCostPer1M, cacheReadCostPer1M, cacheWriteCostPer1M float64
+	
+	switch {
+	case strings.Contains(model, "claude-3-opus"):
+		inputCostPer1M = 15.0
+		outputCostPer1M = 75.0
+		cacheReadCostPer1M = 1.50
+		cacheWriteCostPer1M = 18.75
+	case strings.Contains(model, "claude-opus-4"):
+		inputCostPer1M = 15.0
+		outputCostPer1M = 75.0
+		cacheReadCostPer1M = 1.50
+		cacheWriteCostPer1M = 18.75
+	case strings.Contains(model, "claude-3-5-sonnet"), strings.Contains(model, "claude-3.5-sonnet"):
+		inputCostPer1M = 3.0
+		outputCostPer1M = 15.0
+		cacheReadCostPer1M = 0.30
+		cacheWriteCostPer1M = 3.75
+	case strings.Contains(model, "claude-3-sonnet"):
+		inputCostPer1M = 3.0
+		outputCostPer1M = 15.0
+		cacheReadCostPer1M = 0.30
+		cacheWriteCostPer1M = 3.75
+	case strings.Contains(model, "claude-3-5-haiku"), strings.Contains(model, "claude-3.5-haiku"):
+		inputCostPer1M = 0.80
+		outputCostPer1M = 4.0
+		cacheReadCostPer1M = 0.08
+		cacheWriteCostPer1M = 1.0
+	case strings.Contains(model, "claude-3-haiku"):
+		inputCostPer1M = 0.25
+		outputCostPer1M = 1.25
+		cacheReadCostPer1M = 0.03
+		cacheWriteCostPer1M = 0.30
+	default:
+		// Default to Sonnet pricing if model unknown
+		inputCostPer1M = 3.0
+		outputCostPer1M = 15.0
+		cacheReadCostPer1M = 0.30
+		cacheWriteCostPer1M = 3.75
+	}
 
 	cost := float64(usage.InputTokens) * inputCostPer1M / 1000000
 	cost += float64(usage.OutputTokens) * outputCostPer1M / 1000000
 	cost += float64(usage.CacheReadInputTokens) * cacheReadCostPer1M / 1000000
-	cost += float64(usage.CacheCreationInputTokens) * cacheCreationCostPer1M / 1000000
+	cost += float64(usage.CacheCreationInputTokens) * cacheWriteCostPer1M / 1000000
 	
 	return cost
 }

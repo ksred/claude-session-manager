@@ -22,7 +22,7 @@ type SQLiteHandlers struct {
 func NewSQLiteHandlers(repo *database.SessionRepository, logger *logrus.Logger) *SQLiteHandlers {
 	return &SQLiteHandlers{
 		repo:    repo,
-		adapter: database.NewAPIAdapter(),
+		adapter: database.NewAPIAdapter(repo),
 		logger:  logger,
 	}
 }
@@ -283,6 +283,68 @@ func (h *SQLiteHandlers) GetActivityHandler(c *gin.Context) {
 	})
 }
 
+// GetSessionActivityHandler returns activity for a specific session
+func (h *SQLiteHandlers) GetSessionActivityHandler(c *gin.Context) {
+	sessionID := c.Param("id")
+	
+	limitStr := c.DefaultQuery("limit", "50")
+	limit := 50
+	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+		limit = l
+	}
+
+	activities, err := h.repo.GetSessionActivity(sessionID, limit)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get session activity")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve session activity",
+		})
+		return
+	}
+
+	// Convert to API model
+	apiActivities := make([]database.ActivityEntry, len(activities))
+	for i, activity := range activities {
+		apiActivities[i] = h.adapter.ActivityLogEntryToAPIActivityEntry(activity)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"activity": apiActivities,
+		"total":    len(apiActivities),
+	})
+}
+
+// GetProjectActivityHandler returns activity for a specific project
+func (h *SQLiteHandlers) GetProjectActivityHandler(c *gin.Context) {
+	projectName := c.Param("projectName")
+	
+	limitStr := c.DefaultQuery("limit", "50")
+	limit := 50
+	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+		limit = l
+	}
+
+	activities, err := h.repo.GetProjectActivity(projectName, limit)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get project activity")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve project activity",
+		})
+		return
+	}
+
+	// Convert to API model
+	apiActivities := make([]database.ActivityEntry, len(activities))
+	for i, activity := range activities {
+		apiActivities[i] = h.adapter.ActivityLogEntryToAPIActivityEntry(activity)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"activity": apiActivities,
+		"total":    len(apiActivities),
+	})
+}
+
 // GetUsageStatsHandler returns usage statistics
 func (h *SQLiteHandlers) GetUsageStatsHandler(c *gin.Context) {
 	// Get daily metrics for the last 7 days
@@ -519,5 +581,160 @@ func (h *SQLiteHandlers) GetProjectRecentFilesHandler(c *gin.Context) {
 		"project_name": projectName,
 		"files":        apiFiles,
 		"total":        len(apiFiles),
+	})
+}
+
+// GetTokenTimelineHandler returns overall token usage timeline
+// @Summary Get token usage timeline
+// @Description Retrieve token usage over time with configurable granularity
+// @Tags Analytics
+// @Accept json
+// @Produce json
+// @Param hours query int false "Number of hours to look back (default: 24, max: 720)"
+// @Param granularity query string false "Time granularity: minute, hour, day (default: hour)"
+// @Success 200 {object} TokenTimelineResponse "Successfully retrieved token timeline"
+// @Failure 400 {object} ErrorResponse "Invalid query parameters"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /analytics/tokens/timeline [get]
+func (h *SQLiteHandlers) GetTokenTimelineHandler(c *gin.Context) {
+	// Parse query parameters
+	hours := 24
+	if hoursStr := c.Query("hours"); hoursStr != "" {
+		if parsed, err := strconv.Atoi(hoursStr); err == nil && parsed > 0 && parsed <= 720 {
+			hours = parsed
+		}
+	}
+
+	granularity := c.DefaultQuery("granularity", "hour")
+	if granularity != "minute" && granularity != "hour" && granularity != "day" {
+		granularity = "hour"
+	}
+
+	timeline, err := h.repo.GetTokenTimeline(hours, granularity)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get token timeline")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve token timeline",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"timeline":    timeline,
+		"hours":       hours,
+		"granularity": granularity,
+		"total":       len(timeline),
+	})
+}
+
+// GetSessionTokenTimelineHandler returns token usage timeline for a specific session
+// @Summary Get session token timeline
+// @Description Retrieve token usage over time for a specific session
+// @Tags Sessions
+// @Accept json
+// @Produce json
+// @Param id path string true "Session ID"
+// @Param granularity query string false "Time granularity: minute, hour, day (default: minute)"
+// @Success 200 {object} TokenTimelineResponse "Successfully retrieved session token timeline"
+// @Failure 400 {object} ErrorResponse "Invalid parameters"
+// @Failure 404 {object} ErrorResponse "Session not found"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /sessions/{id}/tokens/timeline [get]
+func (h *SQLiteHandlers) GetSessionTokenTimelineHandler(c *gin.Context) {
+	sessionID := c.Param("id")
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Session ID is required",
+		})
+		return
+	}
+
+	granularity := c.DefaultQuery("granularity", "minute")
+	if granularity != "minute" && granularity != "hour" && granularity != "day" {
+		granularity = "minute"
+	}
+
+	timeline, err := h.repo.GetSessionTokenTimeline(sessionID, granularity)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get session token timeline")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve session token timeline",
+		})
+		return
+	}
+
+	if len(timeline) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Session not found or has no token usage",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"session_id":  sessionID,
+		"timeline":    timeline,
+		"granularity": granularity,
+		"total":       len(timeline),
+	})
+}
+
+// GetProjectTokenTimelineHandler returns token usage timeline for a specific project
+// @Summary Get project token timeline
+// @Description Retrieve token usage over time for a specific project
+// @Tags Projects
+// @Accept json
+// @Produce json
+// @Param projectName path string true "Name of the project"
+// @Param hours query int false "Number of hours to look back (default: 168/7 days, max: 720)"
+// @Param granularity query string false "Time granularity: minute, hour, day (default: hour)"
+// @Success 200 {object} TokenTimelineResponse "Successfully retrieved project token timeline"
+// @Failure 400 {object} ErrorResponse "Invalid parameters"
+// @Failure 404 {object} ErrorResponse "Project not found"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /projects/{projectName}/tokens/timeline [get]
+func (h *SQLiteHandlers) GetProjectTokenTimelineHandler(c *gin.Context) {
+	projectName := c.Param("projectName")
+	if projectName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Project name is required",
+		})
+		return
+	}
+
+	// Parse query parameters
+	hours := 168 // Default to 7 days for project view
+	if hoursStr := c.Query("hours"); hoursStr != "" {
+		if parsed, err := strconv.Atoi(hoursStr); err == nil && parsed > 0 && parsed <= 720 {
+			hours = parsed
+		}
+	}
+
+	granularity := c.DefaultQuery("granularity", "hour")
+	if granularity != "minute" && granularity != "hour" && granularity != "day" {
+		granularity = "hour"
+	}
+
+	timeline, err := h.repo.GetProjectTokenTimeline(projectName, hours, granularity)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get project token timeline")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve project token timeline",
+		})
+		return
+	}
+
+	if len(timeline) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Project not found or has no token usage",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"project_name": projectName,
+		"timeline":     timeline,
+		"hours":        hours,
+		"granularity":  granularity,
+		"total":        len(timeline),
 	})
 }

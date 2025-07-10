@@ -8,18 +8,22 @@ import (
 )
 
 // APIAdapter converts database models to API response models
-type APIAdapter struct{}
+type APIAdapter struct {
+	repo *SessionRepository
+}
 
 // NewAPIAdapter creates a new API adapter
-func NewAPIAdapter() *APIAdapter {
-	return &APIAdapter{}
+func NewAPIAdapter(repo *SessionRepository) *APIAdapter {
+	return &APIAdapter{
+		repo: repo,
+	}
 }
 
 // SessionSummaryToSessionResponse converts a SessionSummary to API SessionResponse
 func (a *APIAdapter) SessionSummaryToSessionResponse(summary *SessionSummary) (*SessionResponse, error) {
 	// Parse files modified
-	var filesModified []string
-	if summary.FilesModified != "" && summary.FilesModified != "[]" {
+	filesModified := []string{}
+	if summary.FilesModified != "" {
 		if err := json.Unmarshal([]byte(summary.FilesModified), &filesModified); err != nil {
 			filesModified = []string{}
 		}
@@ -73,9 +77,13 @@ func (a *APIAdapter) ActivityLogEntryToAPIActivityEntry(entry *ActivityLogEntry)
 	sessionName := ""
 	if entry.SessionID != nil {
 		sessionID = *entry.SessionID
-		// Note: We'd need to join with sessions table to get the session name
-		// For now, we'll use the session ID as the name
-		sessionName = sessionID
+		// Try to get the project name from the session
+		session, err := a.repo.GetSessionByID(sessionID)
+		if err == nil && session != nil {
+			sessionName = session.ProjectName
+		} else {
+			sessionName = sessionID
+		}
 	}
 
 	return ActivityEntry{

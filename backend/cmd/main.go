@@ -26,6 +26,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -85,7 +86,7 @@ var serveCmd = &cobra.Command{
 		}
 
 		// Setup graceful shutdown
-		ctx, cancel := context.WithCancel(context.Background())
+		_, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
 		// Handle shutdown signals
@@ -107,31 +108,37 @@ var serveCmd = &cobra.Command{
 		case sig := <-sigChan:
 			logrus.WithField("signal", sig).Info("Received shutdown signal")
 			
-			// Give server time to cleanup based on config
-			shutdownTimeout := time.Duration(appConfig.Server.ShutdownTimeout) * time.Second
-			shutdownCtx, shutdownCancel := context.WithTimeout(ctx, shutdownTimeout)
-			defer shutdownCancel()
-			
+			logrus.Debug("Calling server.Stop()...")
 			// Stop the server gracefully
 			if err := server.Stop(); err != nil {
 				logrus.WithError(err).Error("Error during server shutdown")
 			}
+			logrus.Debug("server.Stop() completed")
 			
-			// Wait for shutdown to complete or timeout
+			logrus.Debug("Waiting for server goroutine to finish...")
+			// Wait for the server goroutine to finish
 			select {
-			case <-shutdownCtx.Done():
-				logrus.Warn("Shutdown timeout exceeded, forcing exit")
-			case <-time.After(1 * time.Second):
-				logrus.Info("Server shutdown complete")
+			case err := <-serverErr:
+				if err != nil && err != http.ErrServerClosed {
+					logrus.WithError(err).Error("Server error during shutdown")
+				}
+				logrus.Debug("Server goroutine finished")
+			case <-time.After(10 * time.Second):
+				logrus.Error("Timeout waiting for server goroutine to finish")
 			}
 			
+			logrus.Info("Server shutdown complete")
 			return nil
 			
 		case err := <-serverErr:
-			if err != nil {
+			logrus.Debug("Received error from server goroutine")
+			if err != nil && err != http.ErrServerClosed {
 				logrus.WithError(err).Error("Server error")
 				return err
 			}
+			// Server stopped for some other reason
+			logrus.Info("Server stopped")
+			return nil
 		}
 
 		return nil

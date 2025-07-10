@@ -458,6 +458,57 @@ definitions:
         example: 450000
         type: integer
     type: object
+  api.TokenTimelineEntry:
+    description: Token usage data for a specific time period
+    properties:
+      cache_creation_tokens:
+        example: 5000
+        type: integer
+      cache_read_tokens:
+        example: 3000
+        type: integer
+      estimated_cost:
+        example: 0.75
+        type: number
+      input_tokens:
+        example: 15000
+        type: integer
+      message_count:
+        example: 12
+        type: integer
+      output_tokens:
+        example: 8000
+        type: integer
+      timestamp:
+        example: "2024-01-08T14:00:00Z"
+        type: string
+      total_tokens:
+        example: 31000
+        type: integer
+    type: object
+  api.TokenTimelineResponse:
+    description: Response containing token usage timeline data
+    properties:
+      granularity:
+        example: hour
+        type: string
+      hours:
+        example: 24
+        type: integer
+      project_name:
+        example: my-app
+        type: string
+      session_id:
+        example: session_123456
+        type: string
+      timeline:
+        items:
+          $ref: '#/definitions/api.TokenTimelineEntry'
+        type: array
+      total:
+        example: 24
+        type: integer
+    type: object
   api.UsageStats:
     description: Usage statistics and analytics
     properties:
@@ -616,6 +667,38 @@ paths:
       summary: Get time series analytics
       tags:
       - Analytics
+  /analytics/tokens/timeline:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve token usage over time with configurable granularity
+      parameters:
+      - description: 'Number of hours to look back (default: 24, max: 720)'
+        in: query
+        name: hours
+        type: integer
+      - description: 'Time granularity: minute, hour, day (default: hour)'
+        in: query
+        name: granularity
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved token timeline
+          schema:
+            $ref: '#/definitions/api.TokenTimelineResponse'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get token usage timeline
+      tags:
+      - Analytics
   /files/recent:
     get:
       consumes:
@@ -765,6 +848,47 @@ paths:
       summary: Get project recent files
       tags:
       - Projects
+  /projects/{projectName}/tokens/timeline:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve token usage over time for a specific project
+      parameters:
+      - description: Name of the project
+        in: path
+        name: projectName
+        required: true
+        type: string
+      - description: 'Number of hours to look back (default: 168/7 days, max: 720)'
+        in: query
+        name: hours
+        type: integer
+      - description: 'Time granularity: minute, hour, day (default: hour)'
+        in: query
+        name: granularity
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved project token timeline
+          schema:
+            $ref: '#/definitions/api.TokenTimelineResponse'
+        "400":
+          description: Invalid parameters
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Project not found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get project token timeline
+      tags:
+      - Projects
   /search:
     get:
       consumes:
@@ -845,6 +969,43 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Get session by ID
+      tags:
+      - Sessions
+  /sessions/{id}/tokens/timeline:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve token usage over time for a specific session
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 'Time granularity: minute, hour, day (default: minute)'
+        in: query
+        name: granularity
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved session token timeline
+          schema:
+            $ref: '#/definitions/api.TokenTimelineResponse'
+        "400":
+          description: Invalid parameters
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get session token timeline
       tags:
       - Sessions
   /sessions/active:

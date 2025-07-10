@@ -165,6 +165,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/analytics/tokens/timeline": {
+            "get": {
+                "description": "Retrieve token usage over time with configurable granularity",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "Get token usage timeline",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Number of hours to look back (default: 24, max: 720)",
+                        "name": "hours",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Time granularity: minute, hour, day (default: hour)",
+                        "name": "granularity",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved token timeline",
+                        "schema": {
+                            "$ref": "#/definitions/api.TokenTimelineResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid query parameters",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/files/recent": {
             "get": {
                 "description": "Retrieve a list of files that were recently modified across all Claude sessions",
@@ -385,6 +434,68 @@ const docTemplate = `{
                 }
             }
         },
+        "/projects/{projectName}/tokens/timeline": {
+            "get": {
+                "description": "Retrieve token usage over time for a specific project",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Projects"
+                ],
+                "summary": "Get project token timeline",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Name of the project",
+                        "name": "projectName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Number of hours to look back (default: 168/7 days, max: 720)",
+                        "name": "hours",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Time granularity: minute, hour, day (default: hour)",
+                        "name": "granularity",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved project token timeline",
+                        "schema": {
+                            "$ref": "#/definitions/api.TokenTimelineResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Project not found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/search": {
             "get": {
                 "description": "Search across sessions by project name, task description, message content, or file paths",
@@ -558,6 +669,62 @@ const docTemplate = `{
                         "description": "Session found",
                         "schema": {
                             "$ref": "#/definitions/api.SessionResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Session not found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions/{id}/tokens/timeline": {
+            "get": {
+                "description": "Retrieve token usage over time for a specific session",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "Get session token timeline",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Time granularity: minute, hour, day (default: minute)",
+                        "name": "granularity",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved session token timeline",
+                        "schema": {
+                            "$ref": "#/definitions/api.TokenTimelineResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "404": {
@@ -1240,6 +1407,76 @@ const docTemplate = `{
                 "total": {
                     "type": "integer",
                     "example": 450000
+                }
+            }
+        },
+        "api.TokenTimelineEntry": {
+            "description": "Token usage data for a specific time period",
+            "type": "object",
+            "properties": {
+                "cache_creation_tokens": {
+                    "type": "integer",
+                    "example": 5000
+                },
+                "cache_read_tokens": {
+                    "type": "integer",
+                    "example": 3000
+                },
+                "estimated_cost": {
+                    "type": "number",
+                    "example": 0.75
+                },
+                "input_tokens": {
+                    "type": "integer",
+                    "example": 15000
+                },
+                "message_count": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "output_tokens": {
+                    "type": "integer",
+                    "example": 8000
+                },
+                "timestamp": {
+                    "type": "string",
+                    "example": "2024-01-08T14:00:00Z"
+                },
+                "total_tokens": {
+                    "type": "integer",
+                    "example": 31000
+                }
+            }
+        },
+        "api.TokenTimelineResponse": {
+            "description": "Response containing token usage timeline data",
+            "type": "object",
+            "properties": {
+                "granularity": {
+                    "type": "string",
+                    "example": "hour"
+                },
+                "hours": {
+                    "type": "integer",
+                    "example": 24
+                },
+                "project_name": {
+                    "type": "string",
+                    "example": "my-app"
+                },
+                "session_id": {
+                    "type": "string",
+                    "example": "session_123456"
+                },
+                "timeline": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.TokenTimelineEntry"
+                    }
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 24
                 }
             }
         },

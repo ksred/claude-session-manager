@@ -18,14 +18,23 @@ import (
 
 // ClaudeFileWatcher monitors the Claude directory for changes and updates the database
 type ClaudeFileWatcher struct {
-	claudeDir string
-	repo      *SessionRepository
-	importer  *Importer
-	logger    *logrus.Logger
-	watcher   *fsnotify.Watcher
-	mu        sync.RWMutex
-	stopCh    chan struct{}
-	doneCh    chan struct{}
+	claudeDir      string
+	repo           *SessionRepository
+	importer       *Importer
+	logger         *logrus.Logger
+	watcher        *fsnotify.Watcher
+	mu             sync.RWMutex
+	stopCh         chan struct{}
+	doneCh         chan struct{}
+	updateCallback UpdateCallback
+	started        bool
+}
+
+// UpdateCallback is called when sessions are updated
+type UpdateCallback interface {
+	OnSessionUpdate(updateType string, sessionID string, session *Session)
+	OnActivityUpdate(activity *ActivityLogEntry)
+	OnMetricsUpdate(sessionID string, usage *TokenUsage)
 }
 
 // NewFileWatcher creates a new file watcher
@@ -50,8 +59,21 @@ func NewFileWatcher(claudeDir string, repo *SessionRepository, logger *logrus.Lo
 	return fw, nil
 }
 
+// SetUpdateCallback sets the callback for update notifications
+func (fw *ClaudeFileWatcher) SetUpdateCallback(callback UpdateCallback) {
+	fw.updateCallback = callback
+}
+
 // Start begins monitoring the Claude directory
 func (fw *ClaudeFileWatcher) Start(ctx context.Context) error {
+	fw.mu.Lock()
+	if fw.started {
+		fw.mu.Unlock()
+		return fmt.Errorf("file watcher already started")
+	}
+	fw.started = true
+	fw.mu.Unlock()
+
 	// Add the projects directory to watch
 	projectsDir := filepath.Join(fw.claudeDir, "projects")
 	if err := fw.addDirectoryRecursively(projectsDir); err != nil {
@@ -63,20 +85,40 @@ func (fw *ClaudeFileWatcher) Start(ctx context.Context) error {
 	// Start the event processing goroutine
 	go fw.processEvents(ctx)
 
-	// Start periodic sync to catch any missed changes
-	go fw.periodicSync(ctx)
-
 	return nil
 }
 
 // Stop stops the file watcher
 func (fw *ClaudeFileWatcher) Stop() {
+	fw.mu.Lock()
+	if !fw.started {
+		fw.mu.Unlock()
+		fw.logger.Info("File watcher was not started, nothing to stop")
+		return
+	}
+	fw.started = false
+	fw.mu.Unlock()
+
+	fw.logger.Info("Stopping file watcher...")
+	
+	// Signal stop
+	fw.logger.Debug("Closing stop channel")
 	close(fw.stopCh)
+	
+	// Close the fsnotify watcher
 	if fw.watcher != nil {
+		fw.logger.Debug("Closing fsnotify watcher")
 		fw.watcher.Close()
 	}
-	<-fw.doneCh
-	fw.logger.Info("File watcher stopped")
+	
+	// Wait for processEvents goroutine to finish
+	fw.logger.Debug("Waiting for processEvents goroutine to finish...")
+	select {
+	case <-fw.doneCh:
+		fw.logger.Info("File watcher stopped successfully")
+	case <-time.After(5 * time.Second):
+		fw.logger.Warn("Timeout waiting for file watcher to stop")
+	}
 }
 
 // addDirectoryRecursively adds a directory and all its subdirectories to the watcher
@@ -327,6 +369,20 @@ func (fw *ClaudeFileWatcher) processSingleMessage(msg JSONLMessage, projectInfo 
 		return fmt.Errorf("failed to upsert session: %w", err)
 	}
 
+	// Notify about session update
+	if fw.updateCallback != nil {
+		updateType := "session_update"
+		if _, err := fw.repo.GetSessionByID(msg.SessionID); err != nil {
+			updateType = "session_created"
+		}
+		fw.logger.WithFields(logrus.Fields{
+			"update_type":  updateType,
+			"session_id":   session.ID,
+			"project_name": session.ProjectName,
+		}).Debug("File watcher notifying callback about session update")
+		fw.updateCallback.OnSessionUpdate(updateType, session.ID, session)
+	}
+
 	// Process message
 	contentBytes, err := json.Marshal(msg.Message.Content)
 	if err != nil {
@@ -352,6 +408,41 @@ func (fw *ClaudeFileWatcher) processSingleMessage(msg JSONLMessage, projectInfo 
 		return fmt.Errorf("failed to upsert message: %w", err)
 	}
 
+	// Log activity for user messages
+	if msg.Message.Role == "user" {
+		// Extract first 100 chars of message for activity details
+		contentStr := ""
+		if strContent, ok := msg.Message.Content.(string); ok {
+			contentStr = strContent
+		} else if contentBytes, err := json.Marshal(msg.Message.Content); err == nil {
+			contentStr = string(contentBytes)
+		}
+		
+		if len(contentStr) > 100 {
+			contentStr = contentStr[:100] + "..."
+		}
+		
+		activity := &ActivityLogEntry{
+			SessionID:    &msg.SessionID,
+			ActivityType: "message_sent",
+			Details:      fmt.Sprintf("User: %s", contentStr),
+			Timestamp:    msg.Timestamp,
+		}
+		
+		if err := fw.repo.LogActivity(activity); err != nil {
+			fw.logger.WithError(err).Warn("Failed to log message activity")
+		}
+
+		// Notify about activity update
+		if fw.updateCallback != nil {
+			fw.logger.WithFields(logrus.Fields{
+				"activity_type": activity.ActivityType,
+				"session_id":    msg.SessionID,
+			}).Debug("File watcher notifying callback about activity update")
+			fw.updateCallback.OnActivityUpdate(activity)
+		}
+	}
+
 	// Process token usage if present
 	if msg.Message.Usage != nil {
 		usage := &TokenUsage{
@@ -371,19 +462,29 @@ func (fw *ClaudeFileWatcher) processSingleMessage(msg JSONLMessage, projectInfo 
 		if err := fw.repo.UpsertTokenUsage(usage); err != nil {
 			return fmt.Errorf("failed to upsert token usage: %w", err)
 		}
+
+		// Notify about metrics update
+		if fw.updateCallback != nil {
+			fw.logger.WithFields(logrus.Fields{
+				"session_id":    msg.SessionID,
+				"total_tokens":  usage.TotalTokens,
+				"estimated_cost": usage.EstimatedCost,
+			}).Debug("File watcher notifying callback about metrics update")
+			fw.updateCallback.OnMetricsUpdate(msg.SessionID, usage)
+		}
 	}
 
 	// Process tool results if present
-	if msg.ToolUseResult != nil {
-		resultBytes, _ := json.Marshal(msg.ToolUseResult)
+	if msg.ToolUseResult != nil && msg.ToolUseResult.Value != nil {
+		resultBytes, _ := json.Marshal(msg.ToolUseResult.Value)
 		
 		var filePath *string
-		if fp, ok := msg.ToolUseResult["file_path"].(string); ok {
+		if fp, ok := msg.ToolUseResult.Value["file_path"].(string); ok {
 			filePath = &fp
 		}
 
 		toolName := "unknown"
-		if tn, ok := msg.ToolUseResult["tool_name"].(string); ok {
+		if tn, ok := msg.ToolUseResult.Value["tool_name"].(string); ok {
 			toolName = tn
 		}
 
@@ -398,6 +499,32 @@ func (fw *ClaudeFileWatcher) processSingleMessage(msg JSONLMessage, projectInfo 
 
 		if err := fw.repo.UpsertToolResult(toolResult); err != nil {
 			return fmt.Errorf("failed to upsert tool result: %w", err)
+		}
+
+		// Log activity for file modifications
+		if filePath != nil && *filePath != "" && (toolName == "Edit" || toolName == "Write" || toolName == "MultiEdit" || 
+			toolName == "NotebookEdit" || toolName == "NotebookWrite") {
+			activity := &ActivityLogEntry{
+				SessionID:    &msg.SessionID,
+				ActivityType: "file_modified",
+				Details:      fmt.Sprintf("Modified %s using %s", *filePath, toolName),
+				Timestamp:    msg.Timestamp,
+			}
+			
+			if err := fw.repo.LogActivity(activity); err != nil {
+				fw.logger.WithError(err).Warn("Failed to log file modification activity")
+			}
+
+			// Notify about activity update
+			if fw.updateCallback != nil {
+				fw.logger.WithFields(logrus.Fields{
+					"activity_type": activity.ActivityType,
+					"session_id":    msg.SessionID,
+					"file_path":     *filePath,
+					"tool_name":     toolName,
+				}).Debug("File watcher notifying callback about file modification activity")
+				fw.updateCallback.OnActivityUpdate(activity)
+			}
 		}
 	}
 
@@ -417,7 +544,7 @@ func (fw *ClaudeFileWatcher) extractProjectInfo(filePath string) ProjectInfo {
 func (fw *ClaudeFileWatcher) getLastProcessedPosition(filePath string) (int64, error) {
 	var lastProcessed sql.NullInt64
 	err := fw.repo.db.Get(&lastProcessed, `
-		SELECT COALESCE(last_processed, 0) as last_processed
+		SELECT COALESCE(last_processed_position, 0) as last_processed
 		FROM file_watchers 
 		WHERE file_path = ?
 	`, filePath)
@@ -435,7 +562,7 @@ func (fw *ClaudeFileWatcher) getLastProcessedPosition(filePath string) (int64, e
 // updateLastProcessedPosition updates the last processed file position
 func (fw *ClaudeFileWatcher) updateLastProcessedPosition(filePath string, position, fileSize int64) {
 	_, err := fw.repo.db.Exec(`
-		INSERT OR REPLACE INTO file_watchers (file_path, last_modified, last_processed, file_size, updated_at)
+		INSERT OR REPLACE INTO file_watchers (file_path, last_modified, last_processed_position, file_size, updated_at)
 		VALUES (?, CURRENT_TIMESTAMP, ?, ?, CURRENT_TIMESTAMP)
 	`, filePath, position, fileSize)
 	
@@ -444,24 +571,3 @@ func (fw *ClaudeFileWatcher) updateLastProcessedPosition(filePath string, positi
 	}
 }
 
-// periodicSync performs periodic full sync to catch any missed changes
-func (fw *ClaudeFileWatcher) periodicSync(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Minute) // Sync every 30 minutes
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-fw.stopCh:
-			return
-		case <-ticker.C:
-			fw.logger.Debug("Starting periodic sync")
-			if err := fw.importer.ImportClaudeDirectory(fw.claudeDir); err != nil {
-				fw.logger.WithError(err).Error("Periodic sync failed")
-			} else {
-				fw.logger.Debug("Periodic sync completed")
-			}
-		}
-	}
-}

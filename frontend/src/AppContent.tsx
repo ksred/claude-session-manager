@@ -9,7 +9,9 @@ import { ErrorMessage } from './components/Common/ErrorMessage';
 import { 
   useAllSessions, 
   useMetricsSummary, 
-  useActivity, 
+  useActivity,
+  useSessionActivity,
+  useProjectActivity, 
   useUsageStats,
   useTokenTimeline,
   useSessionTokenTimeline,
@@ -24,13 +26,15 @@ export const AppContent: React.FC = () => {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'session' | 'project' | 'analytics'>('session');
-  const [timeRange, setTimeRange] = useState(24);
+  const [timeRange, setTimeRange] = useState(168);
   const [timeGranularity, setTimeGranularity] = useState<'hour' | 'day'>('hour');
 
   // API data hooks
   const { data: sessionsData, isLoading: sessionsLoading, error: sessionsError } = useAllSessions();
   const { data: metricsData, isLoading: metricsLoading, error: metricsError } = useMetricsSummary();
   const { data: activityData } = useActivity();
+  const { data: sessionActivityData } = useSessionActivity(selectedSessionId || undefined);
+  const { data: projectActivityData } = useProjectActivity(selectedProjectId || undefined);
   const { data: _usageData } = useUsageStats();
   
   // WebSocket for real-time updates
@@ -51,7 +55,20 @@ export const AppContent: React.FC = () => {
     most_used_model: 'unknown',
     model_usage: {}
   };
-  const recentActivity = activityData?.activity || [];
+  
+  // Use appropriate activity based on view and selection
+  const recentActivity = useMemo(() => {
+    // When a session is selected (regardless of view), show session-specific activity
+    if (selectedSessionId && sessionActivityData) {
+      return sessionActivityData.activity || [];
+    } 
+    // When in project view with a selected project, use project-specific activity
+    else if (currentView === 'project' && selectedProjectId && projectActivityData) {
+      return projectActivityData.activity || [];
+    }
+    // Default to overall activity
+    return activityData?.activity || [];
+  }, [selectedSessionId, currentView, selectedProjectId, activityData, sessionActivityData, projectActivityData]);
 
   // Set default selected session if none selected and sessions are available
   React.useEffect(() => {
@@ -71,13 +88,13 @@ export const AppContent: React.FC = () => {
     : null;
 
   // Token timeline hooks based on current view
-  const { data: generalTokenData } = useTokenTimeline(timeRange, timeGranularity);
-  const { data: sessionTokenData } = useSessionTokenTimeline(
+  const { data: generalTokenData, isLoading: generalTokenLoading } = useTokenTimeline(timeRange, timeGranularity);
+  const { data: sessionTokenData, isLoading: sessionTokenLoading } = useSessionTokenTimeline(
     currentView === 'session' ? selectedSessionId : null,
     timeRange,
     timeGranularity
   );
-  const { data: projectTokenData } = useProjectTokenTimeline(
+  const { data: projectTokenData, isLoading: projectTokenLoading } = useProjectTokenTimeline(
     currentView === 'project' && selectedProject ? selectedProject.name : null,
     timeRange,
     timeGranularity
@@ -114,6 +131,17 @@ export const AppContent: React.FC = () => {
     // Transform the timeline data to line chart format, or return empty array
     return timelineData ? transformTokenTimelineToLineChartData(timelineData) : [];
   }, [currentView, sessionTokenData, projectTokenData, generalTokenData]);
+  
+  // Determine if chart data is loading based on current view
+  const isChartLoading = useMemo(() => {
+    if (currentView === 'session') {
+      return sessionTokenLoading;
+    } else if (currentView === 'project') {
+      return projectTokenLoading;
+    } else {
+      return generalTokenLoading;
+    }
+  }, [currentView, sessionTokenLoading, projectTokenLoading, generalTokenLoading]);
 
   // Event handlers
   const handleSessionSelect = (sessionId: string) => {
@@ -174,6 +202,7 @@ export const AppContent: React.FC = () => {
             recentActivity={recentActivity}
             chartData={chartData}
             lineChartData={lineChartData}
+            isChartLoading={isChartLoading}
             timeRange={timeRange}
             timeGranularity={timeGranularity}
             onTimeRangeChange={setTimeRange}
@@ -183,8 +212,10 @@ export const AppContent: React.FC = () => {
         ) : currentView === 'project' ? (
           <ProjectDashboard
             selectedProject={selectedProject}
+            recentActivity={recentActivity}
             chartData={chartData}
             lineChartData={lineChartData}
+            isChartLoading={isChartLoading}
             timeRange={timeRange}
             timeGranularity={timeGranularity}
             onTimeRangeChange={setTimeRange}

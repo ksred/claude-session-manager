@@ -28,6 +28,12 @@ export const useWebSocket = () => {
         setConnectionStatus('connected');
         reconnectCountRef.current = 0;
         setError(null);
+        
+        // Send subscribe message
+        ws.send(JSON.stringify({
+          type: 'subscribe',
+          timestamp: Date.now()
+        }));
       };
 
       ws.onmessage = (event) => {
@@ -37,9 +43,169 @@ export const useWebSocket = () => {
           
           // Handle different message types
           switch (message.type) {
-            case 'session_update':
             case 'session_created':
-              // Invalidate sessions data to trigger refresh
+              // New session created
+              if (message.data?.session_id) {
+                const sessionId = message.data.session_id;
+                
+                // Fetch the full session data for the new session
+                import('../services/sessionService').then(({ sessionService }) => {
+                  sessionService.getSessionById(sessionId).then(newSession => {
+                    console.log('🆕 New session created:', newSession.project_name);
+                    
+                    // Add the new session to all relevant lists
+                    queryClient.setQueriesData(
+                      { queryKey: sessionKeys.list({}) },
+                      (oldData: any) => {
+                        if (!oldData?.sessions) return oldData;
+                        
+                        // Add new session at the beginning (most recent)
+                        return {
+                          ...oldData,
+                          sessions: [newSession, ...oldData.sessions]
+                        };
+                      }
+                    );
+                    
+                    // Add to active sessions if active
+                    if (newSession.is_active) {
+                      queryClient.setQueriesData(
+                        { queryKey: sessionKeys.list({ active: true }) },
+                        (oldData: any) => {
+                          if (!oldData?.sessions) return oldData;
+                          
+                          return {
+                            ...oldData,
+                            sessions: [newSession, ...oldData.sessions]
+                          };
+                        }
+                      );
+                    }
+                    
+                    // Add to recent sessions
+                    queryClient.setQueriesData(
+                      { queryKey: sessionKeys.list({ recent: true }) },
+                      (oldData: any) => {
+                        if (!oldData?.sessions) return oldData;
+                        
+                        // Keep only the specified limit of recent sessions
+                        const sessions = [newSession, ...oldData.sessions];
+                        const limit = oldData.sessions.length || 10;
+                        
+                        return {
+                          ...oldData,
+                          sessions: sessions.slice(0, limit)
+                        };
+                      }
+                    );
+                    
+                    // Invalidate metrics to include the new session
+                    queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
+                  }).catch(error => {
+                    console.error('❌ Failed to fetch new session data:', error);
+                    // Fall back to invalidating queries if fetch fails
+                    queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+                    queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
+                    queryClient.invalidateQueries({ queryKey: sessionKeys.active() });
+                    queryClient.invalidateQueries({ queryKey: sessionKeys.recent() });
+                  });
+                });
+              } else {
+                // Fall back if no session_id provided
+                queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+                queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
+                queryClient.invalidateQueries({ queryKey: sessionKeys.active() });
+                queryClient.invalidateQueries({ queryKey: sessionKeys.recent() });
+              }
+              break;
+              
+            case 'session_update':
+              // Existing session updated
+              if (message.data?.session_id) {
+                const sessionId = message.data.session_id;
+                
+                // Fetch the full session data to get updated tokens, costs, etc.
+                import('../services/sessionService').then(({ sessionService }) => {
+                  sessionService.getSessionById(sessionId).then(updatedSession => {
+                    console.log('📊 Fetched updated session data:', updatedSession);
+                    
+                    // Update the session detail cache
+                    queryClient.setQueryData(sessionKeys.detail(sessionId), updatedSession);
+                    
+                    // Update the session in all lists without invalidating
+                    // This prevents reordering and flashing
+                    queryClient.setQueriesData(
+                      { queryKey: sessionKeys.list({}) },
+                      (oldData: any) => {
+                        if (!oldData?.sessions) return oldData;
+                        
+                        const updatedSessions = oldData.sessions.map((session: any) => {
+                          if (session.id === sessionId) {
+                            // Use the full updated session data
+                            return updatedSession;
+                          }
+                          return session;
+                        });
+                        
+                        return { ...oldData, sessions: updatedSessions };
+                      }
+                    );
+                    
+                    // Update active sessions list if the session is active
+                    if (updatedSession.is_active) {
+                      queryClient.setQueriesData(
+                        { queryKey: sessionKeys.list({ active: true }) },
+                        (oldData: any) => {
+                          if (!oldData?.sessions) return oldData;
+                          
+                          const updatedSessions = oldData.sessions.map((session: any) => {
+                            if (session.id === sessionId) {
+                              return updatedSession;
+                            }
+                            return session;
+                          });
+                          
+                          return { ...oldData, sessions: updatedSessions };
+                        }
+                      );
+                    }
+                    
+                    // Update recent sessions list
+                    queryClient.setQueriesData(
+                      { queryKey: sessionKeys.list({ recent: true }) },
+                      (oldData: any) => {
+                        if (!oldData?.sessions) return oldData;
+                        
+                        const updatedSessions = oldData.sessions.map((session: any) => {
+                          if (session.id === sessionId) {
+                            return updatedSession;
+                          }
+                          return session;
+                        });
+                        
+                        return { ...oldData, sessions: updatedSessions };
+                      }
+                    );
+                    
+                    // Invalidate metrics to reflect new token usage and costs
+                    queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
+                    
+                    // Invalidate token timeline for this session
+                    queryClient.invalidateQueries({ 
+                      queryKey: sessionKeys.sessionTokenTimeline(sessionId) 
+                    });
+                  }).catch(error => {
+                    console.error('❌ Failed to fetch updated session data:', error);
+                    // Fall back to invalidating queries if fetch fails
+                    queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+                    queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+                  });
+                });
+              }
+              break;
+              
+            case 'session_deleted':
+              // Session deleted
               queryClient.invalidateQueries({ queryKey: sessionKeys.all });
               queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
               break;
@@ -47,12 +213,66 @@ export const useWebSocket = () => {
             case 'activity_update':
               // Invalidate activity data
               queryClient.invalidateQueries({ queryKey: sessionKeys.activity() });
+              
+              // If it's a file modification, also update recent files
+              if (message.data?.activity?.type === 'file_modified') {
+                queryClient.invalidateQueries({ queryKey: ['files', 'recent'] });
+              }
               break;
               
             case 'metrics_update':
-              // Invalidate metrics data
+              // Metrics updated - fetch updated session data if session_id provided
+              if (message.data?.session_id) {
+                const sessionId = message.data.session_id;
+                
+                // Fetch updated session data to get new token counts and costs
+                import('../services/sessionService').then(({ sessionService }) => {
+                  sessionService.getSessionById(sessionId).then(updatedSession => {
+                    console.log('📈 Metrics updated for session:', updatedSession.project_name);
+                    
+                    // Update the session detail cache
+                    queryClient.setQueryData(sessionKeys.detail(sessionId), updatedSession);
+                    
+                    // Update the session in all lists
+                    queryClient.setQueriesData(
+                      { queryKey: sessionKeys.list({}) },
+                      (oldData: any) => {
+                        if (!oldData?.sessions) return oldData;
+                        
+                        const updatedSessions = oldData.sessions.map((session: any) => {
+                          if (session.id === sessionId) {
+                            return updatedSession;
+                          }
+                          return session;
+                        });
+                        
+                        return { ...oldData, sessions: updatedSessions };
+                      }
+                    );
+                    
+                    // Invalidate token timeline for this session
+                    queryClient.invalidateQueries({ 
+                      queryKey: sessionKeys.sessionTokenTimeline(sessionId) 
+                    });
+                  }).catch(error => {
+                    console.error('❌ Failed to fetch session after metrics update:', error);
+                  });
+                });
+              }
+              
+              // Always invalidate general metrics
               queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
               queryClient.invalidateQueries({ queryKey: sessionKeys.usage() });
+              break;
+              
+            case 'pong':
+              // Heartbeat response
+              console.log('💓 WebSocket heartbeat received');
+              break;
+              
+            case 'subscribed':
+              // Subscription confirmed
+              console.log('✅ WebSocket subscription confirmed');
               break;
               
             default:
@@ -124,8 +344,16 @@ export const useWebSocket = () => {
       connect();
     }, 100);
     
+    // Set up periodic ping to keep connection alive
+    const pingInterval = setInterval(() => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        sendMessage({ type: 'ping', timestamp: Date.now() });
+      }
+    }, 30000); // Ping every 30 seconds
+    
     return () => {
       clearTimeout(connectTimeout);
+      clearInterval(pingInterval);
       disconnect();
     };
   }, []); // Remove dependencies to prevent reconnect loops

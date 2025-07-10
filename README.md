@@ -31,11 +31,28 @@ Claude Session Manager provides a modern web interface to monitor all your activ
 ### Using Docker (Recommended)
 
 ```bash
-# Run with Docker - mounts your Claude directory as read-only
-docker run -d -p 80:80 -v ~/.claude:/root/.claude:ro ksred/claude-session-manager
+# Pull and run the Docker image
+docker run -p 80:80 -v ~/.claude:/data/claude ksred/claude-session-manager
 
 # Access the dashboard
 open http://localhost
+```
+
+The container will:
+- Mount your `~/.claude` directory to `/data/claude` inside the container
+- Create a SQLite database at `~/.claude/sessions.db` for session management
+- Serve the web interface on port 80
+
+#### Custom Claude Directory
+
+If your Claude sessions are stored in a different location, use the `CLAUDE_DIR` environment variable:
+
+```bash
+# Custom Claude directory
+docker run -p 80:80 \
+  -e CLAUDE_DIR=/custom/claude/path \
+  -v /your/custom/claude/dir:/custom/claude/path \
+  ksred/claude-session-manager
 ```
 
 ### Using Docker Compose
@@ -136,10 +153,10 @@ PORT=8080
 HOST=0.0.0.0
 
 # Claude directory (defaults to ~/.claude)
-CLAUDE_HOME_DIR=~/.claude
+CLAUDE_DIR=~/.claude
 
-# Database location
-DB_PATH=./claude_sessions.db
+# Optional: Override database location (defaults to $CLAUDE_DIR/sessions.db)
+DATABASE_PATH=/path/to/custom/sessions.db
 ```
 
 ### Configuration File

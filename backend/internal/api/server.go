@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sync"
@@ -53,7 +54,10 @@ func NewServer(cfg *config.Config) *Server {
 
 	// Start WebSocket hub if enabled
 	if server.wsHub != nil {
-		go server.wsHub.Run()
+		// TODO: This server implementation needs context support for proper shutdown
+		// For now, create a context that never cancels
+		ctx := context.Background()
+		go server.wsHub.Run(ctx)
 	}
 
 	// Initialize sessions cache

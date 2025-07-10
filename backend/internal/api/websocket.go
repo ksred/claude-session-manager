@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -51,9 +52,22 @@ func NewWebSocketHub(logger *logrus.Logger) *WebSocketHub {
 }
 
 // Run starts the WebSocket hub
-func (h *WebSocketHub) Run() {
+func (h *WebSocketHub) Run(ctx context.Context) {
+	h.logger.Info("WebSocket hub Run() started")
 	for {
 		select {
+		case <-ctx.Done():
+			// Context cancelled, clean up and exit
+			h.logger.Info("WebSocket hub received context cancellation")
+			// Close all client connections
+			h.logger.WithField("client_count", len(h.clients)).Info("Closing all WebSocket client connections")
+			for client := range h.clients {
+				close(client.Send)
+				delete(h.clients, client)
+			}
+			h.logger.Info("WebSocket hub Run() exiting")
+			return
+
 		case client := <-h.register:
 			h.clients[client] = true
 			h.logger.WithField("client_id", client.ID).Info("WebSocket client connected")
@@ -66,14 +80,35 @@ func (h *WebSocketHub) Run() {
 			}
 
 		case message := <-h.broadcast:
+			h.logger.WithFields(logrus.Fields{
+				"message_size": len(message),
+				"clients":      len(h.clients),
+			}).Debug("Hub received message to broadcast")
+			
+			sentCount := 0
+			failedCount := 0
 			for client := range h.clients {
 				select {
 				case client.Send <- message:
+					sentCount++
+					h.logger.WithFields(logrus.Fields{
+						"client_id": client.ID,
+					}).Debug("Message queued for client")
 				default:
+					failedCount++
+					h.logger.WithFields(logrus.Fields{
+						"client_id": client.ID,
+					}).Debug("Failed to send to client (buffer full), closing connection")
 					close(client.Send)
 					delete(h.clients, client)
 				}
 			}
+			
+			h.logger.WithFields(logrus.Fields{
+				"sent_count":   sentCount,
+				"failed_count": failedCount,
+				"total_clients": len(h.clients),
+			}).Debug("Finished broadcasting message")
 		}
 	}
 }
@@ -91,12 +126,26 @@ func (h *WebSocketHub) BroadcastUpdate(updateType string, data interface{}) {
 		"timestamp": time.Now().Unix(),
 	}
 
+	// Log the update being broadcast
+	h.logger.WithFields(logrus.Fields{
+		"update_type":   updateType,
+		"client_count":  len(h.clients),
+		"timestamp":     message["timestamp"],
+	}).Debug("Broadcasting WebSocket update to frontend")
+
 	// Convert to JSON
 	jsonData, err := json.Marshal(message)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to marshal WebSocket message")
 		return
 	}
+
+	// Log the message size
+	h.logger.WithFields(logrus.Fields{
+		"update_type":   updateType,
+		"message_size":  len(jsonData),
+		"client_count":  len(h.clients),
+	}).Debug("Sending WebSocket message to broadcast channel")
 
 	h.broadcast <- jsonData
 }
@@ -178,10 +227,14 @@ func (c *WebSocketClient) readPump() {
 				}
 			case "subscribe":
 				// Handle subscription requests
-				c.Logger.WithField("subscription", msg).Info("Client subscribed to updates")
+				c.Logger.WithFields(logrus.Fields{
+					"client_id":    c.ID,
+					"subscription": msg,
+				}).Info("Client subscribed to WebSocket updates")
 				// Send acknowledgment
 				ack := gin.H{"type": "subscribed", "timestamp": time.Now().Unix()}
 				if ackData, err := json.Marshal(ack); err == nil {
+					c.Logger.WithField("client_id", c.ID).Debug("Sending subscription acknowledgment")
 					c.Send <- ackData
 				}
 			default:
@@ -204,26 +257,42 @@ func (c *WebSocketClient) writePump() {
 		case message, ok := <-c.Send:
 			c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if !ok {
+				c.Logger.WithField("client_id", c.ID).Debug("Send channel closed, sending close message")
 				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
+			c.Logger.WithFields(logrus.Fields{
+				"client_id":    c.ID,
+				"message_size": len(message),
+			}).Debug("Writing message to WebSocket client")
+
 			w, err := c.Conn.NextWriter(websocket.TextMessage)
 			if err != nil {
+				c.Logger.WithError(err).WithField("client_id", c.ID).Debug("Failed to get writer")
 				return
 			}
 			w.Write(message)
 
 			// Add queued messages to the current websocket message
 			n := len(c.Send)
+			if n > 0 {
+				c.Logger.WithFields(logrus.Fields{
+					"client_id":        c.ID,
+					"batched_messages": n,
+				}).Debug("Batching additional messages")
+			}
 			for i := 0; i < n; i++ {
 				w.Write([]byte{'\n'})
 				w.Write(<-c.Send)
 			}
 
 			if err := w.Close(); err != nil {
+				c.Logger.WithError(err).WithField("client_id", c.ID).Debug("Failed to close writer")
 				return
 			}
+			
+			c.Logger.WithField("client_id", c.ID).Debug("Successfully sent message to client")
 
 		case <-ticker.C:
 			c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))

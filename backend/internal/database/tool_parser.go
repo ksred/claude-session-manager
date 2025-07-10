@@ -59,17 +59,37 @@ func parseJSONToolCall(data interface{}, timestamp time.Time) *ToolCall {
 		return nil
 	}
 
-	// Check for tool_name or type field
+	// Check for different tool call formats
 	var toolName string
 	var filePath string
+	var params map[string]interface{}
 	
-	if name, ok := obj["tool_name"].(string); ok {
+	// Format 1: {"type": "tool_use", "name": "Edit", "input": {"file_path": "..."}}
+	if typ, ok := obj["type"].(string); ok && typ == "tool_use" {
+		if name, ok := obj["name"].(string); ok {
+			toolName = name
+		}
+		if input, ok := obj["input"].(map[string]interface{}); ok {
+			params = input
+			if fp, ok := input["file_path"].(string); ok {
+				filePath = fp
+			}
+		}
+	} else if name, ok := obj["tool_name"].(string); ok {
+		// Format 2: Legacy format with tool_name directly
 		toolName = name
 		if fp, ok := obj["file_path"].(string); ok {
 			filePath = fp
 		}
+		// Extract parameters
+		params = make(map[string]interface{})
+		for k, v := range obj {
+			if k != "tool_name" && k != "file_path" && k != "type" {
+				params[k] = v
+			}
+		}
 	} else if typ, ok := obj["type"].(string); ok && typ == "tool_result" {
-		// Extract from content if it's a tool result
+		// Format 3: Tool result format
 		if content, ok := obj["content"].([]interface{}); ok && len(content) > 0 {
 			if contentObj, ok := content[0].(map[string]interface{}); ok {
 				if name, ok := contentObj["tool_name"].(string); ok {
@@ -86,12 +106,8 @@ func parseJSONToolCall(data interface{}, timestamp time.Time) *ToolCall {
 		return nil
 	}
 
-	// Extract parameters
-	params := make(map[string]interface{})
-	for k, v := range obj {
-		if k != "tool_name" && k != "file_path" && k != "type" {
-			params[k] = v
-		}
+	if params == nil {
+		params = make(map[string]interface{})
 	}
 
 	return &ToolCall{

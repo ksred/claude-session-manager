@@ -1,17 +1,20 @@
 import React from 'react';
 import { Project } from '../../types/project';
-import { ChartDataPoint } from '../../types/session';
+import { ChartDataPoint, ActivityEntry } from '../../types/session';
 import { formatTokens, formatCost, formatDuration, formatModel } from '../../utils/formatters';
 import { MetricCard } from './MetricCard';
 import { FilesList } from '../Common/FilesList';
+import { ActivityFeed } from '../ActivityFeed/ActivityFeed';
 import { SimpleBarChart } from '../Charts/SimpleBarChart';
 import { SimpleLineChart, LineChartDataPoint } from '../Charts/SimpleLineChart';
 import { cn } from '../../utils/classNames';
 
 interface ProjectDashboardProps {
   selectedProject: Project | null;
+  recentActivity: ActivityEntry[];
   chartData: ChartDataPoint[];
   lineChartData?: LineChartDataPoint[];
+  isChartLoading?: boolean;
   timeRange: number;
   timeGranularity: 'hour' | 'day';
   onTimeRangeChange: (hours: number) => void;
@@ -23,8 +26,10 @@ interface ProjectDashboardProps {
 
 export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   selectedProject,
+  recentActivity,
   chartData,
   lineChartData,
+  isChartLoading = false,
   timeRange,
   timeGranularity,
   onTimeRangeChange,
@@ -151,6 +156,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       <SimpleBarChart 
         data={chartData}
         title="Project Token Usage"
+        isLoading={isChartLoading}
         timeRange={timeRange}
         timeGranularity={timeGranularity}
         onTimeRangeChange={onTimeRangeChange}
@@ -179,6 +185,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
       {/* Project Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Recent Activity */}
+        <ActivityFeed activities={recentActivity} />
+        
         {/* Project Sessions */}
         <div className="activity-card">
           <div className="flex items-center text-white text-sm font-semibold mb-4">

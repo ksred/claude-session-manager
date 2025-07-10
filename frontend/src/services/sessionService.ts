@@ -45,6 +45,18 @@ export const sessionService = {
     return response.data;
   },
 
+  // Get session-specific activity
+  getSessionActivity: async (sessionId: string, limit: number = 50): Promise<ActivityResponse> => {
+    const response = await api.get(`/sessions/${sessionId}/activity?limit=${limit}`);
+    return response.data;
+  },
+
+  // Get project-specific activity
+  getProjectActivity: async (projectName: string, limit: number = 50): Promise<ActivityResponse> => {
+    const response = await api.get(`/projects/${encodeURIComponent(projectName)}/activity?limit=${limit}`);
+    return response.data;
+  },
+
   // Search sessions
   searchSessions: async (query: string): Promise<SessionsResponse> => {
     const response = await api.get(`/search?q=${encodeURIComponent(query)}`);

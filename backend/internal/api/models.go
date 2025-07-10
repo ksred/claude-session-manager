@@ -58,7 +58,7 @@ type MetricsSummary struct {
 // @Description A single activity entry in the system timeline
 type ActivityEntry struct {
 	Timestamp   time.Time `json:"timestamp" example:"2023-01-01T10:00:00Z" description:"Activity timestamp"`
-	Type        string    `json:"type" example:"message_sent" description:"Activity type" enums:"message_sent,session_created,session_updated,error"`
+	Type        string    `json:"type" example:"message_sent" description:"Activity type" enums:"message_sent,session_created,session_updated,file_modified,error"`
 	SessionID   string    `json:"session_id" example:"session_123456" description:"Related session ID"`
 	SessionName string    `json:"session_name" example:"my-project" description:"Session/project name"`
 	Details     string    `json:"details" example:"User sent a message" description:"Activity details"`
@@ -259,4 +259,28 @@ type ProjectRecentFilesResponse struct {
 	ProjectName string              `json:"project_name" example:"my-app" description:"Name of the project"`
 	Files       []ProjectRecentFile `json:"files" description:"List of recently modified files in the project"`
 	Total       int                 `json:"total" example:"45" description:"Total number of recent files in the project"`
+}
+
+// TokenTimelineEntry represents a point in the token usage timeline
+// @Description Token usage data for a specific time period
+type TokenTimelineEntry struct {
+	Timestamp           string  `json:"timestamp" example:"2024-01-08T14:00:00Z" description:"Timestamp for this data point"`
+	InputTokens         int     `json:"input_tokens" example:"15000" description:"Number of input tokens"`
+	OutputTokens        int     `json:"output_tokens" example:"8000" description:"Number of output tokens"`
+	CacheCreationTokens int     `json:"cache_creation_tokens" example:"5000" description:"Number of cache creation tokens"`
+	CacheReadTokens     int     `json:"cache_read_tokens" example:"3000" description:"Number of cache read tokens"`
+	TotalTokens         int     `json:"total_tokens" example:"31000" description:"Total number of tokens"`
+	EstimatedCost       float64 `json:"estimated_cost" example:"0.75" description:"Estimated cost in USD"`
+	MessageCount        int     `json:"message_count" example:"12" description:"Number of messages in this period"`
+}
+
+// TokenTimelineResponse represents the response for token timeline endpoints
+// @Description Response containing token usage timeline data
+type TokenTimelineResponse struct {
+	Timeline     []TokenTimelineEntry `json:"timeline" description:"List of timeline data points"`
+	Hours        int                  `json:"hours,omitempty" example:"24" description:"Number of hours included"`
+	Granularity  string               `json:"granularity" example:"hour" description:"Time granularity (minute, hour, day)"`
+	Total        int                  `json:"total" example:"24" description:"Total number of data points"`
+	SessionID    string               `json:"session_id,omitempty" example:"session_123456" description:"Session ID (for session-specific timeline)"`
+	ProjectName  string               `json:"project_name,omitempty" example:"my-app" description:"Project name (for project-specific timeline)"`
 }

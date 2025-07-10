@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/sirupsen/logrus"
@@ -49,7 +50,7 @@ func (r *SessionRepository) GetSessionByID(sessionID string) (*SessionSummary, e
 // GetActiveSessions returns currently active sessions
 func (r *SessionRepository) GetActiveSessions() ([]*SessionSummary, error) {
 	var sessions []*SessionSummary
-	err := r.db.Select(&sessions, 
+	err := r.db.Select(&sessions,
 		"SELECT * FROM session_summary WHERE is_active = true ORDER BY last_activity DESC")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get active sessions: %w", err)
@@ -60,7 +61,7 @@ func (r *SessionRepository) GetActiveSessions() ([]*SessionSummary, error) {
 // GetRecentSessions returns the N most recent sessions
 func (r *SessionRepository) GetRecentSessions(limit int) ([]*SessionSummary, error) {
 	var sessions []*SessionSummary
-	err := r.db.Select(&sessions, 
+	err := r.db.Select(&sessions,
 		"SELECT * FROM session_summary ORDER BY last_activity DESC LIMIT ?", limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get recent sessions: %w", err)
@@ -72,7 +73,7 @@ func (r *SessionRepository) GetRecentSessions(limit int) ([]*SessionSummary, err
 func (r *SessionRepository) SearchSessions(query string) ([]*SessionSummary, error) {
 	query = strings.ToLower(query)
 	var sessions []*SessionSummary
-	
+
 	searchSQL := `
 		SELECT DISTINCT s.* FROM session_summary s
 		LEFT JOIN messages m ON s.id = m.session_id
@@ -81,7 +82,7 @@ func (r *SessionRepository) SearchSessions(query string) ([]*SessionSummary, err
 		   OR LOWER(s.files_modified) LIKE ?
 		ORDER BY s.last_activity DESC
 	`
-	
+
 	searchPattern := "%" + query + "%"
 	err := r.db.Select(&sessions, searchSQL, searchPattern, searchPattern, searchPattern)
 	if err != nil {
@@ -277,15 +278,299 @@ func (r *SessionRepository) GetPeakHours() ([]map[string]interface{}, error) {
 
 // GetRecentActivity returns recent activity timeline
 func (r *SessionRepository) GetRecentActivity(limit int) ([]*ActivityLogEntry, error) {
-	var activities []*ActivityLogEntry
-	err := r.db.Select(&activities, `
-		SELECT * FROM activity_log 
-		ORDER BY timestamp DESC 
+	// Create a combined view of activities from multiple sources
+	query := `
+		WITH combined_activity AS (
+			-- Get recent user messages directly from messages table
+			SELECT 
+				NULL as id,
+				m.session_id,
+				'message_sent' as activity_type,
+				CASE 
+					-- Tool results
+					WHEN m.content LIKE '%"type":"tool_result"%' THEN 
+						CASE
+							WHEN m.content LIKE '%"is_error":true%' THEN 'Tool error response'
+							WHEN m.content LIKE '%has been updated%' THEN 'File edited'
+							WHEN m.content LIKE '%File created successfully%' THEN 'File created'
+							WHEN m.content LIKE '%curl%' OR m.content LIKE '%http%' THEN 'API test result'
+							ELSE 'Tool result'
+						END
+					-- System messages
+					WHEN m.content LIKE '%[Request interrupted%' THEN 'Request interrupted by user'
+					-- JSON arrays (other tool responses)
+					WHEN m.content LIKE '[{%' THEN 'Tool response'
+					-- Regular messages
+					WHEN LENGTH(m.content) > 100 THEN 'User: ' || SUBSTR(m.content, 1, 100) || '...'
+					ELSE 'User: ' || m.content
+				END as details,
+				m.timestamp,
+				m.timestamp as created_at
+			FROM messages m
+			JOIN sessions s ON m.session_id = s.id
+			WHERE m.role = 'user'
+			
+			UNION ALL
+			
+			-- Get file modifications from tool_results
+			SELECT 
+				NULL as id,
+				tr.session_id,
+				'file_modified' as activity_type,
+				'Modified ' || tr.file_path || ' using ' || tr.tool_name as details,
+				tr.timestamp,
+				tr.timestamp as created_at
+			FROM tool_results tr
+			WHERE tr.file_path IS NOT NULL
+			
+			UNION ALL
+			
+			-- Get non-import activities from activity_log
+			SELECT 
+				id,
+				session_id,
+				activity_type,
+				details,
+				timestamp,
+				created_at
+			FROM activity_log
+			WHERE activity_type NOT IN ('session_imported', 'import_started', 'import_completed')
+		)
+		SELECT 
+			COALESCE(id, ROW_NUMBER() OVER (ORDER BY timestamp DESC)) as id,
+			session_id,
+			activity_type,
+			details,
+			timestamp,
+			created_at
+		FROM combined_activity
+		ORDER BY timestamp DESC
 		LIMIT ?
-	`, limit)
+	`
+	
+	type tempActivity struct {
+		ID           int       `db:"id"`
+		SessionID    *string   `db:"session_id"`
+		ActivityType string    `db:"activity_type"`
+		Details      string    `db:"details"`
+		Timestamp    time.Time `db:"timestamp"`
+		CreatedAt    time.Time `db:"created_at"`
+	}
+	
+	var tempActivities []tempActivity
+	err := r.db.Select(&tempActivities, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get recent activity: %w", err)
 	}
+	
+	// Convert to ActivityLogEntry
+	activities := make([]*ActivityLogEntry, len(tempActivities))
+	for i, ta := range tempActivities {
+		activities[i] = &ActivityLogEntry{
+			ID:           ta.ID,
+			SessionID:    ta.SessionID,
+			ActivityType: ta.ActivityType,
+			Details:      ta.Details,
+			Timestamp:    ta.Timestamp,
+			CreatedAt:    ta.CreatedAt,
+		}
+	}
+	
+	return activities, nil
+}
+
+// GetSessionActivity returns recent activity for a specific session
+func (r *SessionRepository) GetSessionActivity(sessionID string, limit int) ([]*ActivityLogEntry, error) {
+	query := `
+		WITH combined_activity AS (
+			-- Get recent user messages for this session
+			SELECT 
+				NULL as id,
+				m.session_id,
+				'message_sent' as activity_type,
+				CASE 
+					-- Tool results
+					WHEN m.content LIKE '%"type":"tool_result"%' THEN 
+						CASE
+							WHEN m.content LIKE '%"is_error":true%' THEN 'Tool error response'
+							WHEN m.content LIKE '%has been updated%' THEN 'File edited'
+							WHEN m.content LIKE '%File created successfully%' THEN 'File created'
+							WHEN m.content LIKE '%curl%' OR m.content LIKE '%http%' THEN 'API test result'
+							ELSE 'Tool result'
+						END
+					-- System messages
+					WHEN m.content LIKE '%[Request interrupted%' THEN 'Request interrupted by user'
+					-- JSON arrays (other tool responses)
+					WHEN m.content LIKE '[{%' THEN 'Tool response'
+					-- Regular messages
+					WHEN LENGTH(m.content) > 100 THEN 'User: ' || SUBSTR(m.content, 1, 100) || '...'
+					ELSE 'User: ' || m.content
+				END as details,
+				m.timestamp,
+				m.timestamp as created_at
+			FROM messages m
+			WHERE m.role = 'user' 
+			AND m.session_id = ?
+			
+			UNION ALL
+			
+			-- Get assistant responses (using first 100 chars as preview)
+			SELECT 
+				NULL as id,
+				m.session_id,
+				'message_received' as activity_type,
+				CASE
+					WHEN m.content LIKE '%' || CHAR(96) || CHAR(96) || CHAR(96) || '%' THEN 'Assistant provided code'
+					WHEN LENGTH(m.content) > 100 THEN 'Assistant: ' || SUBSTR(m.content, 1, 100) || '...'
+					ELSE 'Assistant: ' || m.content
+				END as details,
+				m.timestamp,
+				m.timestamp as created_at
+			FROM messages m
+			WHERE m.role = 'assistant' 
+			AND m.session_id = ?
+			
+			UNION ALL
+			
+			-- Get tool uses for this session
+			SELECT 
+				NULL as id,
+				tr.session_id,
+				'tool_used' as activity_type,
+				tr.tool_name || 
+				CASE 
+					WHEN tr.file_path IS NOT NULL AND tr.file_path != '' THEN 
+						': ' || tr.file_path
+					ELSE ''
+				END as details,
+				tr.timestamp,
+				tr.timestamp as created_at
+			FROM tool_results tr
+			WHERE tr.session_id = ?
+			
+			UNION ALL
+			
+			-- Get activity log entries for this session
+			SELECT 
+				al.id,
+				al.session_id,
+				al.activity_type,
+				al.details,
+				al.timestamp,
+				al.created_at
+			FROM activity_log al
+			WHERE al.session_id = ?
+		)
+		SELECT DISTINCT * FROM combined_activity
+		ORDER BY timestamp DESC
+		LIMIT ?
+	`
+
+	var activities []*ActivityLogEntry
+	err := r.db.Select(&activities, query, sessionID, sessionID, sessionID, sessionID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session activity: %w", err)
+	}
+
+	return activities, nil
+}
+
+// GetProjectActivity returns recent activity for all sessions in a project
+func (r *SessionRepository) GetProjectActivity(projectName string, limit int) ([]*ActivityLogEntry, error) {
+	query := `
+		WITH project_sessions AS (
+			SELECT id FROM sessions WHERE project_name = ?
+		),
+		combined_activity AS (
+			-- Get recent user messages for project sessions
+			SELECT 
+				NULL as id,
+				m.session_id,
+				'message_sent' as activity_type,
+				CASE 
+					-- Tool results
+					WHEN m.content LIKE '%"type":"tool_result"%' THEN 
+						CASE
+							WHEN m.content LIKE '%"is_error":true%' THEN 'Tool error response'
+							WHEN m.content LIKE '%has been updated%' THEN 'File edited'
+							WHEN m.content LIKE '%File created successfully%' THEN 'File created'
+							WHEN m.content LIKE '%curl%' OR m.content LIKE '%http%' THEN 'API test result'
+							ELSE 'Tool result'
+						END
+					-- System messages
+					WHEN m.content LIKE '%[Request interrupted%' THEN 'Request interrupted by user'
+					-- JSON arrays (other tool responses)
+					WHEN m.content LIKE '[{%' THEN 'Tool response'
+					-- Regular messages
+					WHEN LENGTH(m.content) > 100 THEN 'User: ' || SUBSTR(m.content, 1, 100) || '...'
+					ELSE 'User: ' || m.content
+				END as details,
+				m.timestamp,
+				m.timestamp as created_at
+			FROM messages m
+			WHERE m.role = 'user' 
+			AND m.session_id IN (SELECT id FROM project_sessions)
+			
+			UNION ALL
+			
+			-- Get assistant responses
+			SELECT 
+				NULL as id,
+				m.session_id,
+				'message_received' as activity_type,
+				CASE
+					WHEN m.content LIKE '%' || CHAR(96) || CHAR(96) || CHAR(96) || '%' THEN 'Assistant provided code'
+					WHEN LENGTH(m.content) > 100 THEN 'Assistant: ' || SUBSTR(m.content, 1, 100) || '...'
+					ELSE 'Assistant: ' || m.content
+				END as details,
+				m.timestamp,
+				m.timestamp as created_at
+			FROM messages m
+			WHERE m.role = 'assistant' 
+			AND m.session_id IN (SELECT id FROM project_sessions)
+			
+			UNION ALL
+			
+			-- Get tool uses for project sessions
+			SELECT 
+				NULL as id,
+				tr.session_id,
+				'tool_used' as activity_type,
+				tr.tool_name || 
+				CASE 
+					WHEN tr.file_path IS NOT NULL AND tr.file_path != '' THEN 
+						': ' || tr.file_path
+					ELSE ''
+				END as details,
+				tr.timestamp,
+				tr.timestamp as created_at
+			FROM tool_results tr
+			WHERE tr.session_id IN (SELECT id FROM project_sessions)
+			
+			UNION ALL
+			
+			-- Get activity log entries for project sessions
+			SELECT 
+				al.id,
+				al.session_id,
+				al.activity_type,
+				al.details,
+				al.timestamp,
+				al.created_at
+			FROM activity_log al
+			WHERE al.session_id IN (SELECT id FROM project_sessions)
+		)
+		SELECT DISTINCT * FROM combined_activity
+		ORDER BY timestamp DESC
+		LIMIT ?
+	`
+
+	var activities []*ActivityLogEntry
+	err := r.db.Select(&activities, query, projectName, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project activity: %w", err)
+	}
+
 	return activities, nil
 }
 
@@ -376,24 +661,24 @@ func (r *SessionRepository) LogActivity(entry *ActivityLogEntry) error {
 
 // RecentFile represents a recently modified file
 type RecentFile struct {
-	FilePath         string  `db:"file_path" json:"file_path"`
-	LastModified     string  `db:"last_modified" json:"last_modified"`
-	SessionID        string  `db:"session_id" json:"session_id"`
-	SessionTitle     string  `db:"session_title" json:"session_title"`
-	ProjectName      string  `db:"project_name" json:"project_name"`
-	ProjectPath      string  `db:"project_path" json:"project_path"`
-	ToolName         string  `db:"tool_name" json:"tool_name"`
-	Occurrences      int     `db:"occurrences" json:"occurrences"`
-	GitBranch        *string `db:"git_branch" json:"git_branch,omitempty"`
+	FilePath     string  `db:"file_path" json:"file_path"`
+	LastModified string  `db:"last_modified" json:"last_modified"`
+	SessionID    string  `db:"session_id" json:"session_id"`
+	SessionTitle string  `db:"session_title" json:"session_title"`
+	ProjectName  string  `db:"project_name" json:"project_name"`
+	ProjectPath  string  `db:"project_path" json:"project_path"`
+	ToolName     string  `db:"tool_name" json:"tool_name"`
+	Occurrences  int     `db:"occurrences" json:"occurrences"`
+	GitBranch    *string `db:"git_branch" json:"git_branch,omitempty"`
 }
 
 // ProjectRecentFile represents a file modified within a specific project
 type ProjectRecentFile struct {
-	FilePath            string              `db:"file_path" json:"file_path"`
-	LastModified        string              `db:"last_modified" json:"last_modified"`
-	TotalModifications  int                 `db:"total_modifications" json:"total_modifications"`
-	ToolsUsed           string              `db:"tools_used" json:"tools_used"` // Comma-separated list
-	Sessions            []RecentFileSession `json:"sessions"`
+	FilePath           string              `db:"file_path" json:"file_path"`
+	LastModified       string              `db:"last_modified" json:"last_modified"`
+	TotalModifications int                 `db:"total_modifications" json:"total_modifications"`
+	ToolsUsed          string              `db:"tools_used" json:"tools_used"` // Comma-separated list
+	Sessions           []RecentFileSession `json:"sessions"`
 }
 
 // RecentFileSession represents session info for a recently modified file
@@ -449,12 +734,136 @@ func (r *SessionRepository) GetRecentFiles(limit, offset int) ([]RecentFile, int
 		ORDER BY last_modified DESC
 		LIMIT ? OFFSET ?
 	`, limit, offset)
-	
+
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get recent files: %w", err)
 	}
 
 	return files, total, nil
+}
+
+// TokenTimelineEntry represents a single point in the token usage timeline
+type TokenTimelineEntry struct {
+	Timestamp           string  `db:"timestamp" json:"timestamp"`
+	InputTokens         int     `db:"input_tokens" json:"input_tokens"`
+	OutputTokens        int     `db:"output_tokens" json:"output_tokens"`
+	CacheCreationTokens int     `db:"cache_creation_tokens" json:"cache_creation_tokens"`
+	CacheReadTokens     int     `db:"cache_read_tokens" json:"cache_read_tokens"`
+	TotalTokens         int     `db:"total_tokens" json:"total_tokens"`
+	EstimatedCost       float64 `db:"estimated_cost" json:"estimated_cost"`
+	MessageCount        int     `db:"message_count" json:"message_count"`
+}
+
+// GetTokenTimeline returns overall token usage over time with configurable granularity
+func (r *SessionRepository) GetTokenTimeline(hours int, granularity string) ([]TokenTimelineEntry, error) {
+	// Determine the time format based on granularity
+	var timeFormat string
+	switch granularity {
+	case "minute":
+		timeFormat = "%Y-%m-%d %H:%M:00"
+	case "hour":
+		timeFormat = "%Y-%m-%d %H:00:00"
+	case "day":
+		timeFormat = "%Y-%m-%d 00:00:00"
+	default:
+		timeFormat = "%Y-%m-%d %H:00:00" // Default to hourly
+	}
+
+	query := `
+		SELECT 
+			strftime(?, m.timestamp) as timestamp,
+			SUM(tu.input_tokens) as input_tokens,
+			SUM(tu.output_tokens) as output_tokens,
+			SUM(tu.cache_creation_input_tokens) as cache_creation_tokens,
+			SUM(tu.cache_read_input_tokens) as cache_read_tokens,
+			SUM(tu.input_tokens + tu.output_tokens + tu.cache_creation_input_tokens + tu.cache_read_input_tokens) as total_tokens,
+			SUM(tu.estimated_cost) as estimated_cost,
+			COUNT(DISTINCT m.id) as message_count
+		FROM messages m
+		JOIN token_usage tu ON m.id = tu.message_id
+		WHERE m.timestamp >= datetime('now', '-' || ? || ' hours')
+		GROUP BY strftime(?, m.timestamp)
+		ORDER BY timestamp ASC
+	`
+
+	var entries []TokenTimelineEntry
+	err := r.db.Select(&entries, query, timeFormat, hours, timeFormat)
+	return entries, err
+}
+
+// GetSessionTokenTimeline returns token usage over time for a specific session
+func (r *SessionRepository) GetSessionTokenTimeline(sessionID string, granularity string) ([]TokenTimelineEntry, error) {
+	// Determine the time format based on granularity
+	var timeFormat string
+	switch granularity {
+	case "minute":
+		timeFormat = "%Y-%m-%d %H:%M:00"
+	case "hour":
+		timeFormat = "%Y-%m-%d %H:00:00"
+	case "day":
+		timeFormat = "%Y-%m-%d 00:00:00"
+	default:
+		timeFormat = "%Y-%m-%d %H:%M:00" // Default to minute for session view
+	}
+
+	query := `
+		SELECT 
+			strftime(?, m.timestamp) as timestamp,
+			SUM(tu.input_tokens) as input_tokens,
+			SUM(tu.output_tokens) as output_tokens,
+			SUM(tu.cache_creation_input_tokens) as cache_creation_tokens,
+			SUM(tu.cache_read_input_tokens) as cache_read_tokens,
+			SUM(tu.input_tokens + tu.output_tokens + tu.cache_creation_input_tokens + tu.cache_read_input_tokens) as total_tokens,
+			SUM(tu.estimated_cost) as estimated_cost,
+			COUNT(DISTINCT m.id) as message_count
+		FROM messages m
+		JOIN token_usage tu ON m.id = tu.message_id
+		WHERE m.session_id = ?
+		GROUP BY strftime(?, m.timestamp)
+		ORDER BY timestamp ASC
+	`
+
+	var entries []TokenTimelineEntry
+	err := r.db.Select(&entries, query, timeFormat, sessionID, timeFormat)
+	return entries, err
+}
+
+// GetProjectTokenTimeline returns token usage over time for a specific project
+func (r *SessionRepository) GetProjectTokenTimeline(projectName string, hours int, granularity string) ([]TokenTimelineEntry, error) {
+	// Determine the time format based on granularity
+	var timeFormat string
+	switch granularity {
+	case "minute":
+		timeFormat = "%Y-%m-%d %H:%M:00"
+	case "hour":
+		timeFormat = "%Y-%m-%d %H:00:00"
+	case "day":
+		timeFormat = "%Y-%m-%d 00:00:00"
+	default:
+		timeFormat = "%Y-%m-%d %H:00:00" // Default to hourly
+	}
+
+	query := `
+		SELECT 
+			strftime(?, m.timestamp) as timestamp,
+			SUM(tu.input_tokens) as input_tokens,
+			SUM(tu.output_tokens) as output_tokens,
+			SUM(tu.cache_creation_input_tokens) as cache_creation_tokens,
+			SUM(tu.cache_read_input_tokens) as cache_read_tokens,
+			SUM(tu.input_tokens + tu.output_tokens + tu.cache_creation_input_tokens + tu.cache_read_input_tokens) as total_tokens,
+			SUM(tu.estimated_cost) as estimated_cost,
+			COUNT(DISTINCT m.id) as message_count
+		FROM messages m
+		JOIN token_usage tu ON m.id = tu.message_id
+		JOIN sessions s ON m.session_id = s.id
+		WHERE s.project_name = ? AND m.timestamp >= datetime('now', '-' || ? || ' hours')
+		GROUP BY strftime(?, m.timestamp)
+		ORDER BY timestamp ASC
+	`
+
+	var entries []TokenTimelineEntry
+	err := r.db.Select(&entries, query, timeFormat, projectName, hours, timeFormat)
+	return entries, err
 }
 
 // GetProjectRecentFiles returns recently modified files for a specific project
@@ -473,15 +882,15 @@ func (r *SessionRepository) GetProjectRecentFiles(projectName string, limit int,
 			WHERE tr.file_path IS NOT NULL
 			AND s.project_name = ?
 	`
-	
+
 	args := []interface{}{projectName}
-	
+
 	// Add branch filter if specified
 	if branch != nil && *branch != "" {
 		query += " AND s.git_branch = ?"
 		args = append(args, *branch)
 	}
-	
+
 	query += `
 			GROUP BY tr.file_path
 		)
@@ -495,21 +904,21 @@ func (r *SessionRepository) GetProjectRecentFiles(projectName string, limit int,
 		ORDER BY last_modified DESC
 		LIMIT ?
 	`
-	
+
 	args = append(args, limit)
-	
+
 	// Execute query
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project recent files: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var files []ProjectRecentFile
 	for rows.Next() {
 		var file ProjectRecentFile
 		var sessionsInfo string
-		
+
 		err := rows.Scan(
 			&file.FilePath,
 			&file.LastModified,
@@ -520,12 +929,12 @@ func (r *SessionRepository) GetProjectRecentFiles(projectName string, limit int,
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
-		
+
 		// Parse sessions info
 		if sessionsInfo != "" {
 			sessionParts := strings.Split(sessionsInfo, ",")
 			seen := make(map[string]bool)
-			
+
 			for _, part := range sessionParts {
 				info := strings.Split(part, "|")
 				if len(info) >= 3 && !seen[info[0]] {
@@ -541,9 +950,9 @@ func (r *SessionRepository) GetProjectRecentFiles(projectName string, limit int,
 				}
 			}
 		}
-		
+
 		files = append(files, file)
 	}
-	
+
 	return files, nil
 }
