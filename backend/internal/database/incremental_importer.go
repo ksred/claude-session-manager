@@ -49,6 +49,21 @@ func (i *IncrementalImporter) ImportClaudeDirectory(claudeDir string, forceIniti
 		return fmt.Errorf("failed to start import run: %w", err)
 	}
 
+	// Ensure import run is marked as failed if we panic or exit unexpectedly
+	importRunCompleted := false
+	defer func() {
+		if r := recover(); r != nil {
+			if !importRunCompleted {
+				i.finishImportRun(importRun.ID, "failed", fmt.Sprintf("panic during import: %v", r))
+			}
+			i.logger.WithField("panic", r).Error("Import process panicked")
+			panic(r) // Re-panic after cleanup
+		} else if !importRunCompleted {
+			// If we exit without completing normally, mark as failed
+			i.finishImportRun(importRun.ID, "failed", "import process exited unexpectedly")
+		}
+	}()
+
 	i.logger.WithFields(logrus.Fields{
 		"run_type": runType,
 		"run_id":   importRun.ID,
@@ -76,6 +91,7 @@ func (i *IncrementalImporter) ImportClaudeDirectory(claudeDir string, forceIniti
 
 	if len(filesToProcess) == 0 {
 		i.logger.Info("No files need processing - all up to date")
+		importRunCompleted = true
 		i.finishImportRun(importRun.ID, "completed", "")
 		return nil
 	}
@@ -90,6 +106,7 @@ func (i *IncrementalImporter) ImportClaudeDirectory(claudeDir string, forceIniti
 		select {
 		case <-i.ctx.Done():
 			i.logger.Info("Import cancelled by context")
+			importRunCompleted = true
 			i.finishImportRun(importRun.ID, "cancelled", "cancelled by user")
 			return i.ctx.Err()
 		default:
@@ -123,6 +140,9 @@ func (i *IncrementalImporter) ImportClaudeDirectory(claudeDir string, forceIniti
 		}
 	}
 
+	// Mark import as completed before updating database
+	importRunCompleted = true
+	
 	// Update import run with final stats
 	_, err = i.db.Exec(`
 		UPDATE import_runs 

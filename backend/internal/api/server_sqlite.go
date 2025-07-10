@@ -60,6 +60,21 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 		wsHub = NewWebSocketHub(logger)
 	}
 
+	// Clean up any stuck import processes from previous runs
+	if err := db.CleanupStuckImports(); err != nil {
+		logger.WithError(err).Error("Failed to cleanup stuck imports")
+		// Don't fail startup for this, just log the error
+	}
+
+	// Check for files modified while the server was down
+	missedFiles, err := db.CheckForMissedFiles(cfg.Claude.HomeDirectory)
+	if err != nil {
+		logger.WithError(err).Error("Failed to check for missed files")
+		// Don't fail startup for this, just log the error
+	} else if missedFiles > 0 {
+		logger.WithField("missed_files", missedFiles).Info("Found files modified while server was down - will be processed during startup import")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	server := &SQLiteServer{

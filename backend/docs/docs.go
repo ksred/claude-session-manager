@@ -799,6 +799,7 @@ const docTemplate = `{
                         "message_sent",
                         "session_created",
                         "session_updated",
+                        "file_modified",
                         "error"
                     ],
                     "example": "message_sent"

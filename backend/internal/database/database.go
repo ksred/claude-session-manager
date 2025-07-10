@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
@@ -43,8 +45,10 @@ func NewDatabase(config Config) (*Database, error) {
 	}
 
 	// Configure connection pool for better concurrency
-	db.SetMaxOpenConns(1)  // SQLite works better with single connection for writes
-	db.SetMaxIdleConns(1)
+	// SQLite with WAL mode can handle multiple readers + 1 writer
+	db.SetMaxOpenConns(10)           // Allow multiple concurrent read operations
+	db.SetMaxIdleConns(5)            // Keep some connections ready
+	db.SetConnMaxLifetime(time.Hour) // Recycle connections hourly
 
 	database := &Database{
 		DB:     db,
@@ -149,14 +153,14 @@ func (db *Database) applySchemaUpdates() error {
 		// If column doesn't exist, add it
 		if !columnExists {
 			db.logger.Infof("Adding missing %s column to file_watchers table", col.name)
-			
+
 			_, err = db.Exec(fmt.Sprintf(`
 				ALTER TABLE file_watchers ADD COLUMN %s %s
 			`, col.name, col.definition))
 			if err != nil {
 				return fmt.Errorf("failed to add %s column: %w", col.name, err)
 			}
-			
+
 			// Update any existing rows
 			_, err = db.Exec(fmt.Sprintf(`
 				UPDATE file_watchers SET %s = %s WHERE %s IS NULL
@@ -164,12 +168,125 @@ func (db *Database) applySchemaUpdates() error {
 			if err != nil {
 				return fmt.Errorf("failed to update %s values: %w", col.name, err)
 			}
-			
+
 			db.logger.Infof("Successfully added %s column to file_watchers table", col.name)
 		}
 	}
 
 	return nil
+}
+
+// CleanupStuckImports marks old running imports as failed
+// This should be called during server startup to clean up orphaned imports
+func (db *Database) CleanupStuckImports() error {
+	db.logger.Info("Cleaning up stuck import processes...")
+
+	// Mark imports that have been running for more than 1 hour as failed
+	result, err := db.Exec(`
+		UPDATE import_runs 
+		SET status = 'failed', 
+		    error_message = 'Import process was interrupted - cleaned up on startup',
+		    end_time = CURRENT_TIMESTAMP
+		WHERE status = 'running' 
+		AND start_time < datetime('now', '-1 hour')
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to cleanup stuck imports: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		db.logger.WithError(err).Warn("Could not get rows affected count")
+	} else if rowsAffected > 0 {
+		db.logger.WithField("count", rowsAffected).Info("Cleaned up stuck import processes")
+	} else {
+		db.logger.Info("No stuck import processes found")
+	}
+
+	return nil
+}
+
+// CheckForMissedFiles scans for files modified since the last successful import
+// This should be called during startup to catch files modified while the server was down
+// Returns the number of missed files found
+func (db *Database) CheckForMissedFiles(claudeDir string) (int, error) {
+	db.logger.Info("Checking for files modified since last import...")
+
+	// Get the timestamp of the last successful import
+	var lastImportTime *time.Time
+	err := db.Get(&lastImportTime, `
+		SELECT MAX(end_time) 
+		FROM import_runs 
+		WHERE status = 'completed' 
+		AND end_time IS NOT NULL
+	`)
+	if err != nil && err != sql.ErrNoRows {
+		return 0, fmt.Errorf("failed to get last import time: %w", err)
+	}
+
+	projectsDir := filepath.Join(claudeDir, "projects")
+
+	// If no successful imports, we'll catch everything in the next import
+	if lastImportTime == nil {
+		db.logger.Info("No previous successful imports found - full import will be triggered")
+		return 0, nil
+	}
+
+	db.logger.WithField("last_import", lastImportTime.Format(time.RFC3339)).Info("Last successful import time")
+
+	// Walk through all project directories to find modified files
+	missedFiles := 0
+	updatedFiles := 0
+
+	err = filepath.Walk(projectsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip files we can't access
+		}
+
+		// Only process .jsonl files
+		if !strings.HasSuffix(path, ".jsonl") {
+			return nil
+		}
+
+		// Check if file was modified after last import
+		if info.ModTime().After(*lastImportTime) {
+			missedFiles++
+
+			// Update or insert file watcher entry
+			_, err := db.Exec(`
+				INSERT INTO file_watchers (file_path, last_modified, import_status)
+				VALUES (?, ?, 'pending')
+				ON CONFLICT(file_path) DO UPDATE SET
+					last_modified = excluded.last_modified,
+					import_status = 'pending',
+					updated_at = CURRENT_TIMESTAMP
+			`, path, info.ModTime())
+
+			if err != nil {
+				db.logger.WithError(err).WithField("file", path).Warn("Failed to update file watcher entry")
+			} else {
+				updatedFiles++
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to scan for missed files: %w", err)
+	}
+
+	if missedFiles > 0 {
+		db.logger.WithFields(logrus.Fields{
+			"missed_files":  missedFiles,
+			"updated_files": updatedFiles,
+			"since":         lastImportTime.Format(time.RFC3339),
+		}).Info("Found files modified since last import - will be processed in next incremental import")
+	} else {
+		db.logger.Info("No files modified since last import")
+	}
+
+	return missedFiles, nil
 }
 
 // Close closes the database connection
