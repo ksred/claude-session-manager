@@ -1,12 +1,21 @@
 import React from 'react';
 import { Project } from '../../types/project';
+import { ChartDataPoint } from '../../types/session';
 import { formatTokens, formatCost, formatDuration, formatModel } from '../../utils/formatters';
 import { MetricCard } from './MetricCard';
 import { FilesList } from '../Common/FilesList';
+import { SimpleBarChart } from '../Charts/SimpleBarChart';
+import { SimpleLineChart, LineChartDataPoint } from '../Charts/SimpleLineChart';
 import { cn } from '../../utils/classNames';
 
 interface ProjectDashboardProps {
   selectedProject: Project | null;
+  chartData: ChartDataPoint[];
+  lineChartData?: LineChartDataPoint[];
+  timeRange: number;
+  timeGranularity: 'hour' | 'day';
+  onTimeRangeChange: (hours: number) => void;
+  onTimeGranularityChange: (granularity: 'hour' | 'day') => void;
   onSessionSelect: (sessionId: string) => void;
   onRefresh?: () => void;
   className?: string;
@@ -14,6 +23,12 @@ interface ProjectDashboardProps {
 
 export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   selectedProject,
+  chartData,
+  lineChartData,
+  timeRange,
+  timeGranularity,
+  onTimeRangeChange,
+  onTimeGranularityChange,
   onSessionSelect,
   onRefresh,
   className
@@ -131,6 +146,36 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           />
         ))}
       </div>
+
+      {/* Token Usage Chart */}
+      <SimpleBarChart 
+        data={chartData}
+        title="Project Token Usage"
+        timeRange={timeRange}
+        timeGranularity={timeGranularity}
+        onTimeRangeChange={onTimeRangeChange}
+        onTimeGranularityChange={onTimeGranularityChange}
+        showControls={true}
+        className="mb-6"
+      />
+
+      {/* Cost and Message Count Chart */}
+      {lineChartData && lineChartData.length > 0 && (
+        <SimpleLineChart
+          data={lineChartData}
+          series={[
+            { key: 'cost', label: 'Cost ($)', color: '#10b981', yAxisID: 'y' },
+            { key: 'messages', label: 'Messages', color: '#8b5cf6', yAxisID: 'y1' }
+          ]}
+          title="Cost & Activity Trends"
+          showLegend={true}
+          formatValue={(value, key) => {
+            if (key === 'cost') return `$${value.toFixed(2)}`;
+            return value.toLocaleString();
+          }}
+          className="mb-6"
+        />
+      )}
 
       {/* Project Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

@@ -38,7 +38,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
           {main}
         </div>
       </div>

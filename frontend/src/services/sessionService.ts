@@ -1,5 +1,5 @@
 import api from './api';
-import { SessionsResponse, SessionsLimitResponse, ActivityResponse, MetricsSummary, UsageStats } from '../types/api';
+import { SessionsResponse, SessionsLimitResponse, ActivityResponse, MetricsSummary, UsageStats, TokenTimelineResponse } from '../types/api';
 import { Session } from '../types/session';
 
 export const sessionService = {
@@ -52,5 +52,29 @@ export const sessionService = {
       sessions: response.data.results,
       total: response.data.total
     };
+  },
+
+  // Get token timeline for all analytics
+  getTokenTimeline: async (hours: number = 24, granularity: 'hour' | 'day' = 'hour'): Promise<TokenTimelineResponse> => {
+    const response = await api.get('/analytics/tokens/timeline', {
+      params: { hours, granularity }
+    });
+    return response.data;
+  },
+
+  // Get token timeline for a specific session
+  getSessionTokenTimeline: async (sessionId: string, hours: number = 24, granularity: 'hour' | 'day' = 'hour'): Promise<TokenTimelineResponse> => {
+    const response = await api.get(`/sessions/${sessionId}/tokens/timeline`, {
+      params: { hours, granularity }
+    });
+    return response.data;
+  },
+
+  // Get token timeline for a specific project
+  getProjectTokenTimeline: async (projectName: string, hours: number = 24, granularity: 'hour' | 'day' = 'hour'): Promise<TokenTimelineResponse> => {
+    const response = await api.get(`/projects/${encodeURIComponent(projectName)}/tokens/timeline`, {
+      params: { hours, granularity }
+    });
+    return response.data;
   }
 };

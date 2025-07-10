@@ -37,6 +37,26 @@ export interface WebSocketMessage {
   timestamp: string;
 }
 
+// Token timeline types
+export interface TokenTimelinePoint {
+  timestamp: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  total_tokens: number;
+  estimated_cost: number;
+  message_count: number;
+  label?: string;
+}
+
+export interface TokenTimelineResponse {
+  timeline: TokenTimelinePoint[];
+  total: number;
+  hours: number;
+  granularity: string;
+}
+
 // API error types
 export interface ErrorResponse {
   error: string;

@@ -1,4 +1,5 @@
 // Utility functions for formatting data
+import { TokenTimelinePoint } from '../types/api';
 export const formatTime = (dateString: string): string => {
   const date = new Date(dateString);
   const now = new Date();
@@ -38,4 +39,59 @@ export const formatModel = (model: string): string => {
     'claude-3-haiku-20240307': 'Haiku 3'
   };
   return modelMap[model] || model;
+};
+
+export const transformTokenTimelineToChartData = (timeline: TokenTimelinePoint[]) => {
+  if (!timeline || !Array.isArray(timeline)) {
+    return [];
+  }
+  
+  // Transform the data without filtering by time (backend already handles time range)
+  return timeline
+    .filter(point => point && typeof point.total_tokens === 'number')
+    .map(point => {
+      const date = new Date(point.timestamp);
+      return {
+        timestamp: date,
+        value: point.total_tokens || 0,
+        label: point.label || formatTimeLabel(date)
+      };
+    })
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+};
+
+const formatTimeLabel = (date: Date): string => {
+  const hour = date.getHours();
+  const day = date.getDate();
+  const month = date.getMonth() + 1;
+  
+  // Check if we're looking at hourly or daily data
+  // If all timestamps are at midnight, it's likely daily data
+  if (hour === 0) {
+    return `${month}/${day}`;
+  }
+  
+  // Otherwise show hour
+  return `${hour}:00`;
+};
+
+export const transformTokenTimelineToLineChartData = (timeline: TokenTimelinePoint[]) => {
+  if (!timeline || !Array.isArray(timeline)) {
+    return [];
+  }
+  
+  return timeline
+    .filter(point => point && typeof point.total_tokens === 'number')
+    .map(point => {
+      const date = new Date(point.timestamp);
+      return {
+        timestamp: date,
+        values: {
+          cost: point.estimated_cost || 0,
+          messages: point.message_count || 0
+        },
+        label: point.label || formatTimeLabel(date)
+      };
+    })
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 };

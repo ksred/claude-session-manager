@@ -11,16 +11,21 @@ import {
   useMetricsSummary, 
   useActivity, 
   useUsageStats,
+  useTokenTimeline,
+  useSessionTokenTimeline,
+  useProjectTokenTimeline,
   useRefreshData 
 } from './hooks/useSessionData';
 import { useWebSocket } from './hooks/useWebSocket';
 import { groupSessionsByProject } from './utils/projectHelpers';
-import { mockChartData } from './utils/mockData'; // Keep chart data as mock for now
+import { transformTokenTimelineToChartData, transformTokenTimelineToLineChartData } from './utils/formatters';
 
 export const AppContent: React.FC = () => {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'session' | 'project' | 'analytics'>('session');
+  const [timeRange, setTimeRange] = useState(24);
+  const [timeGranularity, setTimeGranularity] = useState<'hour' | 'day'>('hour');
 
   // API data hooks
   const { data: sessionsData, isLoading: sessionsLoading, error: sessionsError } = useAllSessions();
@@ -64,6 +69,51 @@ export const AppContent: React.FC = () => {
   const selectedProject = selectedProjectId 
     ? projects.find(p => p.id === selectedProjectId) || null
     : null;
+
+  // Token timeline hooks based on current view
+  const { data: generalTokenData } = useTokenTimeline(timeRange, timeGranularity);
+  const { data: sessionTokenData } = useSessionTokenTimeline(
+    currentView === 'session' ? selectedSessionId : null,
+    timeRange,
+    timeGranularity
+  );
+  const { data: projectTokenData } = useProjectTokenTimeline(
+    currentView === 'project' && selectedProject ? selectedProject.name : null,
+    timeRange,
+    timeGranularity
+  );
+
+  // Compute chart data based on current view and available data
+  const chartData = useMemo(() => {
+    let timelineData = null;
+    
+    if (currentView === 'session' && sessionTokenData?.timeline) {
+      timelineData = sessionTokenData.timeline;
+    } else if (currentView === 'project' && projectTokenData?.timeline) {
+      timelineData = projectTokenData.timeline;
+    } else if (generalTokenData?.timeline) {
+      timelineData = generalTokenData.timeline;
+    }
+    
+    // Transform the timeline data to chart format, or return empty array
+    return timelineData ? transformTokenTimelineToChartData(timelineData) : [];
+  }, [currentView, sessionTokenData, projectTokenData, generalTokenData]);
+
+  // Compute line chart data based on current view and available data
+  const lineChartData = useMemo(() => {
+    let timelineData = null;
+    
+    if (currentView === 'session' && sessionTokenData?.timeline) {
+      timelineData = sessionTokenData.timeline;
+    } else if (currentView === 'project' && projectTokenData?.timeline) {
+      timelineData = projectTokenData.timeline;
+    } else if (generalTokenData?.timeline) {
+      timelineData = generalTokenData.timeline;
+    }
+    
+    // Transform the timeline data to line chart format, or return empty array
+    return timelineData ? transformTokenTimelineToLineChartData(timelineData) : [];
+  }, [currentView, sessionTokenData, projectTokenData, generalTokenData]);
 
   // Event handlers
   const handleSessionSelect = (sessionId: string) => {
@@ -122,12 +172,23 @@ export const AppContent: React.FC = () => {
           <MainDashboard
             selectedSession={selectedSession}
             recentActivity={recentActivity}
-            chartData={mockChartData} // TODO: Replace with real chart data from usage stats
+            chartData={chartData}
+            lineChartData={lineChartData}
+            timeRange={timeRange}
+            timeGranularity={timeGranularity}
+            onTimeRangeChange={setTimeRange}
+            onTimeGranularityChange={setTimeGranularity}
             onRefresh={handleRefresh}
           />
         ) : currentView === 'project' ? (
           <ProjectDashboard
             selectedProject={selectedProject}
+            chartData={chartData}
+            lineChartData={lineChartData}
+            timeRange={timeRange}
+            timeGranularity={timeGranularity}
+            onTimeRangeChange={setTimeRange}
+            onTimeGranularityChange={setTimeGranularity}
             onSessionSelect={handleSessionSelect}
             onRefresh={handleRefresh}
           />

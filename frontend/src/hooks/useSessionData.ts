@@ -11,6 +11,9 @@ export const sessionKeys = {
   metrics: () => ['metrics'] as const,
   activity: () => ['activity'] as const,
   usage: () => ['usage'] as const,
+  tokenTimeline: () => ['tokenTimeline'] as const,
+  sessionTokenTimeline: (id: string) => ['tokenTimeline', 'session', id] as const,
+  projectTokenTimeline: (name: string) => ['tokenTimeline', 'project', name] as const,
 };
 
 // Get all sessions
@@ -102,6 +105,41 @@ export const useSearchSessions = (query: string) => {
   });
 };
 
+// Get token timeline for all analytics
+export const useTokenTimeline = (hours: number = 24, granularity: 'hour' | 'day' = 'hour') => {
+  return useQuery({
+    queryKey: [...sessionKeys.tokenTimeline(), { hours, granularity }],
+    queryFn: () => sessionService.getTokenTimeline(hours, granularity),
+    staleTime: 60000, // 1 minute
+    refetchInterval: 120000, // 2 minutes
+    retry: 3,
+  });
+};
+
+// Get token timeline for a specific session
+export const useSessionTokenTimeline = (sessionId: string | null, hours: number = 24, granularity: 'hour' | 'day' = 'hour') => {
+  return useQuery({
+    queryKey: [...sessionKeys.sessionTokenTimeline(sessionId || ''), { hours, granularity }],
+    queryFn: () => sessionService.getSessionTokenTimeline(sessionId!, hours, granularity),
+    enabled: !!sessionId,
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 3,
+  });
+};
+
+// Get token timeline for a specific project
+export const useProjectTokenTimeline = (projectName: string | null, hours: number = 24, granularity: 'hour' | 'day' = 'hour') => {
+  return useQuery({
+    queryKey: [...sessionKeys.projectTokenTimeline(projectName || ''), { hours, granularity }],
+    queryFn: () => sessionService.getProjectTokenTimeline(projectName!, hours, granularity),
+    enabled: !!projectName,
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 3,
+  });
+};
+
 // Hook for manual refresh of all data
 export const useRefreshData = () => {
   const queryClient = useQueryClient();
@@ -111,5 +149,6 @@ export const useRefreshData = () => {
     queryClient.invalidateQueries({ queryKey: sessionKeys.metrics() });
     queryClient.invalidateQueries({ queryKey: sessionKeys.activity() });
     queryClient.invalidateQueries({ queryKey: sessionKeys.usage() });
+    queryClient.invalidateQueries({ queryKey: sessionKeys.tokenTimeline() });
   };
 };
