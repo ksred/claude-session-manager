@@ -51,9 +51,12 @@ export const useWebSocket = () => {
               if (message.data?.session_id) {
                 const sessionId = message.data.session_id;
                 
-                // Fetch the full session data for the new session
-                import('../services/sessionService').then(({ sessionService }) => {
-                  sessionService.getSessionById(sessionId).then(newSession => {
+                // Debounce fetching the full session data for the new session
+                debouncedInvalidator.current.debounceInvalidation(
+                  `fetch-session-${sessionId}`,
+                  () => {
+                    import('../services/sessionService').then(({ sessionService }) => {
+                      sessionService.getSessionById(sessionId).then(newSession => {
                     console.log('🆕 New session created:', newSession.project_name);
                     
                     // Add the new session to all relevant lists
@@ -126,8 +129,10 @@ export const useWebSocket = () => {
                       'sessions-recent',
                       () => queryClient.invalidateQueries({ queryKey: sessionKeys.recent() })
                     );
-                  });
-                });
+                      });
+                    });
+                  }
+                );
               } else {
                 // Fall back if no session_id provided
                 debouncedInvalidator.current.debounceInvalidation(
@@ -154,9 +159,12 @@ export const useWebSocket = () => {
               if (message.data?.session_id) {
                 const sessionId = message.data.session_id;
                 
-                // Fetch the full session data to get updated tokens, costs, etc.
-                import('../services/sessionService').then(({ sessionService }) => {
-                  sessionService.getSessionById(sessionId).then(updatedSession => {
+                // Debounce fetching the full session data to get updated tokens, costs, etc.
+                debouncedInvalidator.current.debounceInvalidation(
+                  `fetch-session-update-${sessionId}`,
+                  () => {
+                    import('../services/sessionService').then(({ sessionService }) => {
+                      sessionService.getSessionById(sessionId).then(updatedSession => {
                     console.log('📊 Fetched updated session data:', updatedSession);
                     
                     // Update the session detail cache
@@ -243,8 +251,10 @@ export const useWebSocket = () => {
                       'sessions-all',
                       () => queryClient.invalidateQueries({ queryKey: sessionKeys.all })
                     );
-                  });
-                });
+                      });
+                    });
+                  }
+                );
               }
               break;
               
@@ -281,9 +291,12 @@ export const useWebSocket = () => {
               if (message.data?.session_id) {
                 const sessionId = message.data.session_id;
                 
-                // Fetch updated session data to get new token counts and costs
-                import('../services/sessionService').then(({ sessionService }) => {
-                  sessionService.getSessionById(sessionId).then(updatedSession => {
+                // Debounce fetching updated session data to get new token counts and costs
+                debouncedInvalidator.current.debounceInvalidation(
+                  `fetch-metrics-update-${sessionId}`,
+                  () => {
+                    import('../services/sessionService').then(({ sessionService }) => {
+                      sessionService.getSessionById(sessionId).then(updatedSession => {
                     console.log('📈 Metrics updated for session:', updatedSession.project_name);
                     
                     // Update the session detail cache
@@ -315,10 +328,12 @@ export const useWebSocket = () => {
                         });
                       }
                     );
-                  }).catch(error => {
-                    console.error('❌ Failed to fetch session after metrics update:', error);
-                  });
-                });
+                      }).catch(error => {
+                        console.error('❌ Failed to fetch session after metrics update:', error);
+                      });
+                    });
+                  }
+                );
               }
               
               // Always invalidate general metrics
