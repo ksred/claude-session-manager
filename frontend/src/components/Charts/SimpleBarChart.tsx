@@ -8,7 +8,7 @@ interface SimpleBarChartProps {
   timeRange?: number;
   timeGranularity?: 'hour' | 'day';
   onTimeRangeChange?: (hours: number) => void;
-  onTimeGranularityChange?: (granularity: 'hour' | 'day') => void;
+  onTimeGranularityChange?: (granularity: 'minute' | 'hour' | 'day') => void;
   showControls?: boolean;
   className?: string;
   isLoading?: boolean;
@@ -92,9 +92,10 @@ export const SimpleBarChart: React.FC<SimpleBarChartProps> = ({
             {/* Granularity Dropdown */}
             <select
               value={timeGranularity}
-              onChange={(e) => onTimeGranularityChange(e.target.value as 'hour' | 'day')}
+              onChange={(e) => onTimeGranularityChange(e.target.value as 'minute' | 'hour' | 'day')}
               className="px-2 py-1 text-xs bg-gray-800 border border-gray-700 rounded text-white focus:outline-none focus:border-primary"
             >
+              <option value="minute">Minute</option>
               <option value="hour">Hourly</option>
               <option value="day">Daily</option>
             </select>

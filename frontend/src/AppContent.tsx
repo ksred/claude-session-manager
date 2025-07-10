@@ -27,7 +27,7 @@ export const AppContent: React.FC = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'session' | 'project' | 'analytics'>('session');
   const [timeRange, setTimeRange] = useState(168);
-  const [timeGranularity, setTimeGranularity] = useState<'hour' | 'day'>('hour');
+  const [timeGranularity, setTimeGranularity] = useState<'minute' | 'hour' | 'day'>('minute');
 
   // API data hooks
   const { data: sessionsData, isLoading: sessionsLoading, error: sessionsError } = useAllSessions();

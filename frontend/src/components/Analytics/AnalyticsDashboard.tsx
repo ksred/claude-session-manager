@@ -14,7 +14,7 @@ interface AnalyticsDashboardProps {
 
 export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ className }) => {
   const [hours, setHours] = useState(168);
-  const [granularity, setGranularity] = useState<'hour' | 'day'>('hour');
+  const [granularity, setGranularity] = useState<'minute' | 'hour' | 'day'>('minute');
   
   const { data: tokenData } = useTokenTimeline(hours, granularity);
   const chartData = tokenData?.timeline ? transformTokenTimelineToChartData(tokenData.timeline) : [];

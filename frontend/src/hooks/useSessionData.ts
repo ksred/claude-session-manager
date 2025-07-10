@@ -162,7 +162,7 @@ export const useSearchSessions = (query: string) => {
 };
 
 // Get token timeline for all analytics
-export const useTokenTimeline = (hours: number = 24, granularity: 'hour' | 'day' = 'hour') => {
+export const useTokenTimeline = (hours: number = 24, granularity: 'minute' | 'hour' | 'day' = 'hour') => {
   return useQuery({
     queryKey: [...sessionKeys.tokenTimeline(), { hours, granularity }],
     queryFn: () => sessionService.getTokenTimeline(hours, granularity),
@@ -173,7 +173,7 @@ export const useTokenTimeline = (hours: number = 24, granularity: 'hour' | 'day'
 };
 
 // Get token timeline for a specific session
-export const useSessionTokenTimeline = (sessionId: string | null, hours: number = 24, granularity: 'hour' | 'day' = 'hour') => {
+export const useSessionTokenTimeline = (sessionId: string | null, hours: number = 24, granularity: 'minute' | 'hour' | 'day' = 'hour') => {
   return useQuery({
     queryKey: [...sessionKeys.sessionTokenTimeline(sessionId || ''), { hours, granularity }],
     queryFn: () => sessionService.getSessionTokenTimeline(sessionId!, hours, granularity),
@@ -185,7 +185,7 @@ export const useSessionTokenTimeline = (sessionId: string | null, hours: number 
 };
 
 // Get token timeline for a specific project
-export const useProjectTokenTimeline = (projectName: string | null, hours: number = 24, granularity: 'hour' | 'day' = 'hour') => {
+export const useProjectTokenTimeline = (projectName: string | null, hours: number = 24, granularity: 'minute' | 'hour' | 'day' = 'hour') => {
   return useQuery({
     queryKey: [...sessionKeys.projectTokenTimeline(projectName || ''), { hours, granularity }],
     queryFn: () => sessionService.getProjectTokenTimeline(projectName!, hours, granularity),

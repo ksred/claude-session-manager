@@ -67,7 +67,7 @@ export const sessionService = {
   },
 
   // Get token timeline for all analytics
-  getTokenTimeline: async (hours: number = 24, granularity: 'hour' | 'day' = 'hour'): Promise<TokenTimelineResponse> => {
+  getTokenTimeline: async (hours: number = 24, granularity: 'minute' | 'hour' | 'day' = 'hour'): Promise<TokenTimelineResponse> => {
     const response = await api.get('/analytics/tokens/timeline', {
       params: { hours, granularity }
     });
@@ -75,7 +75,7 @@ export const sessionService = {
   },
 
   // Get token timeline for a specific session
-  getSessionTokenTimeline: async (sessionId: string, hours: number = 24, granularity: 'hour' | 'day' = 'hour'): Promise<TokenTimelineResponse> => {
+  getSessionTokenTimeline: async (sessionId: string, hours: number = 24, granularity: 'minute' | 'hour' | 'day' = 'hour'): Promise<TokenTimelineResponse> => {
     const response = await api.get(`/sessions/${sessionId}/tokens/timeline`, {
       params: { hours, granularity }
     });
@@ -83,7 +83,7 @@ export const sessionService = {
   },
 
   // Get token timeline for a specific project
-  getProjectTokenTimeline: async (projectName: string, hours: number = 24, granularity: 'hour' | 'day' = 'hour'): Promise<TokenTimelineResponse> => {
+  getProjectTokenTimeline: async (projectName: string, hours: number = 24, granularity: 'minute' | 'hour' | 'day' = 'hour'): Promise<TokenTimelineResponse> => {
     const response = await api.get(`/projects/${encodeURIComponent(projectName)}/tokens/timeline`, {
       params: { hours, granularity }
     });

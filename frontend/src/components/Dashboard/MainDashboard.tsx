@@ -15,9 +15,9 @@ interface MainDashboardProps {
   lineChartData?: LineChartDataPoint[];
   isChartLoading?: boolean;
   timeRange: number;
-  timeGranularity: 'hour' | 'day';
+  timeGranularity: 'minute' | 'hour' | 'day';
   onTimeRangeChange: (hours: number) => void;
-  onTimeGranularityChange: (granularity: 'hour' | 'day') => void;
+  onTimeGranularityChange: (granularity: 'minute' | 'hour' | 'day') => void;
   onRefresh?: () => void;
   className?: string;
 }
