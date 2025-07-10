@@ -367,7 +367,7 @@ func (r *SessionRepository) GetRecentActivity(limit int) ([]*ActivityLogEntry, e
 	activities := make([]*ActivityLogEntry, len(tempActivities))
 	for i, ta := range tempActivities {
 		activities[i] = &ActivityLogEntry{
-			ID:           ta.ID,
+			ID:           &ta.ID,
 			SessionID:    ta.SessionID,
 			ActivityType: ta.ActivityType,
 			Details:      ta.Details,

@@ -101,7 +101,7 @@ type ImportRun struct {
 
 // ActivityLogEntry represents an activity log entry
 type ActivityLogEntry struct {
-	ID           int       `db:"id" json:"id"`
+	ID           *int      `db:"id" json:"id"`
 	SessionID    *string   `db:"session_id" json:"session_id"`
 	ActivityType string    `db:"activity_type" json:"activity_type"`
 	Details      string    `db:"details" json:"details"`
