@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { WebSocketMessage } from '../types/api';
 import { sessionKeys } from './useSessionData';
 
-const WS_URL = 'ws://localhost:8080/api/v1/ws';
+const WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/ws`;
 const RECONNECT_INTERVAL = 3000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 

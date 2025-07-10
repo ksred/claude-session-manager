@@ -6,7 +6,7 @@ interface SimpleBarChartProps {
   data: ChartDataPoint[];
   title?: string;
   timeRange?: number;
-  timeGranularity?: 'hour' | 'day';
+  timeGranularity?: 'minute' | 'hour' | 'day';
   onTimeRangeChange?: (hours: number) => void;
   onTimeGranularityChange?: (granularity: 'minute' | 'hour' | 'day') => void;
   showControls?: boolean;

@@ -70,18 +70,19 @@ type ToolResult struct {
 
 // FileWatcher represents a monitored file with processing status
 type FileWatcher struct {
-	ID               int        `db:"id" json:"id"`
-	FilePath         string     `db:"file_path" json:"file_path"`
-	LastModified     time.Time  `db:"last_modified" json:"last_modified"`
-	LastProcessed    *time.Time `db:"last_processed" json:"last_processed"`
-	FileSize         int64      `db:"file_size" json:"file_size"`
-	FileHash         *string    `db:"file_hash" json:"file_hash"`
-	ImportStatus     string     `db:"import_status" json:"import_status"`
-	SessionsImported int        `db:"sessions_imported" json:"sessions_imported"`
-	MessagesImported int        `db:"messages_imported" json:"messages_imported"`
-	LastError        *string    `db:"last_error" json:"last_error"`
-	CreatedAt        time.Time  `db:"created_at" json:"created_at"`
-	UpdatedAt        time.Time  `db:"updated_at" json:"updated_at"`
+	ID                     int        `db:"id" json:"id"`
+	FilePath               string     `db:"file_path" json:"file_path"`
+	LastModified           time.Time  `db:"last_modified" json:"last_modified"`
+	LastProcessed          *time.Time `db:"last_processed" json:"last_processed"`
+	LastProcessedPosition  int64      `db:"last_processed_position" json:"last_processed_position"`
+	FileSize               int64      `db:"file_size" json:"file_size"`
+	FileHash               *string    `db:"file_hash" json:"file_hash"`
+	ImportStatus           string     `db:"import_status" json:"import_status"`
+	SessionsImported       int        `db:"sessions_imported" json:"sessions_imported"`
+	MessagesImported       int        `db:"messages_imported" json:"messages_imported"`
+	LastError              *string    `db:"last_error" json:"last_error"`
+	CreatedAt              time.Time  `db:"created_at" json:"created_at"`
+	UpdatedAt              time.Time  `db:"updated_at" json:"updated_at"`
 }
 
 // ImportRun represents a single import operation

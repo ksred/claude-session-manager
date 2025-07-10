@@ -213,8 +213,8 @@ func (db *Database) CheckForMissedFiles(claudeDir string) (int, error) {
 	db.logger.Info("Checking for files modified since last import...")
 
 	// Get the timestamp of the last successful import
-	var lastImportTime *time.Time
-	err := db.Get(&lastImportTime, `
+	var lastImportTimeStr sql.NullString
+	err := db.Get(&lastImportTimeStr, `
 		SELECT MAX(end_time) 
 		FROM import_runs 
 		WHERE status = 'completed' 
@@ -227,9 +227,15 @@ func (db *Database) CheckForMissedFiles(claudeDir string) (int, error) {
 	projectsDir := filepath.Join(claudeDir, "projects")
 
 	// If no successful imports, we'll catch everything in the next import
-	if lastImportTime == nil {
+	if !lastImportTimeStr.Valid {
 		db.logger.Info("No previous successful imports found - full import will be triggered")
 		return 0, nil
+	}
+
+	// Parse the time string
+	lastImportTime, err := time.Parse("2006-01-02 15:04:05", lastImportTimeStr.String)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse last import time: %w", err)
 	}
 
 	db.logger.WithField("last_import", lastImportTime.Format(time.RFC3339)).Info("Last successful import time")
@@ -249,7 +255,7 @@ func (db *Database) CheckForMissedFiles(claudeDir string) (int, error) {
 		}
 
 		// Check if file was modified after last import
-		if info.ModTime().After(*lastImportTime) {
+		if info.ModTime().After(lastImportTime) {
 			missedFiles++
 
 			// Update or insert file watcher entry

@@ -240,6 +240,7 @@ func (i *IncrementalImporter) identifyFilesToProcess(projectsDir string, entries
 // fileNeedsProcessing checks if a file needs to be imported/updated
 func (i *IncrementalImporter) fileNeedsProcessing(filePath string, modTime time.Time, size int64, forceAll bool) (bool, error) {
 	if forceAll {
+		i.logger.WithField("file", filePath).Debug("File needs processing: forceAll is true")
 		return true, nil
 	}
 
@@ -247,19 +248,50 @@ func (i *IncrementalImporter) fileNeedsProcessing(filePath string, modTime time.
 	err := i.db.Get(&fw, "SELECT * FROM file_watchers WHERE file_path = ?", filePath)
 	if err != nil {
 		// File not tracked yet, needs processing
+		i.logger.WithFields(logrus.Fields{
+			"file": filePath,
+			"error": err.Error(),
+		}).Debug("File needs processing: not tracked yet in file_watchers")
 		return true, nil
 	}
 
 	// Check if file has been modified since last processing
-	if modTime.After(fw.LastModified) || size != fw.FileSize {
+	// If never processed before, process it
+	if fw.LastProcessed == nil {
+		i.logger.WithField("file", filePath).Debug("File needs processing: last_processed is NULL")
+		return true, nil
+	}
+	
+	// If file was modified after last processing or size changed, process it
+	if modTime.After(*fw.LastProcessed) || size != fw.FileSize {
+		i.logger.WithFields(logrus.Fields{
+			"file": filePath,
+			"mod_time": modTime.Format(time.RFC3339),
+			"last_processed": fw.LastProcessed.Format(time.RFC3339),
+			"current_size": size,
+			"tracked_size": fw.FileSize,
+			"time_comparison": modTime.After(*fw.LastProcessed),
+			"size_changed": size != fw.FileSize,
+		}).Debug("File needs processing: modification time or size changed")
 		return true, nil
 	}
 
 	// Check if import was successful
 	if fw.ImportStatus != "completed" {
+		i.logger.WithFields(logrus.Fields{
+			"file": filePath,
+			"import_status": fw.ImportStatus,
+		}).Debug("File needs processing: import status is not 'completed'")
 		return true, nil
 	}
 
+	i.logger.WithFields(logrus.Fields{
+		"file": filePath,
+		"last_processed": fw.LastProcessed.Format(time.RFC3339),
+		"mod_time": modTime.Format(time.RFC3339),
+		"size": size,
+		"import_status": fw.ImportStatus,
+	}).Debug("File does not need processing: up to date")
 	return false, nil
 }
 
@@ -287,9 +319,14 @@ func (i *IncrementalImporter) processFile(fileInfo FileToProcess) (int, int, err
 // markFileProcessing marks a file as being processed
 func (i *IncrementalImporter) markFileProcessing(filePath string, modTime time.Time, size int64) {
 	_, err := i.db.Exec(`
-		INSERT OR REPLACE INTO file_watchers 
+		INSERT INTO file_watchers 
 		(file_path, last_modified, file_size, import_status, updated_at)
 		VALUES (?, ?, ?, 'processing', CURRENT_TIMESTAMP)
+		ON CONFLICT(file_path) DO UPDATE SET
+			last_modified = excluded.last_modified,
+			file_size = excluded.file_size,
+			import_status = 'processing',
+			updated_at = CURRENT_TIMESTAMP
 	`, filePath, modTime, size)
 	
 	if err != nil {
