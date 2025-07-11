@@ -64,7 +64,7 @@ func (bo *BatchOperations) batchUpsertSessions(tx *sqlx.Tx, sessions []Session) 
 
 	// Build batch insert with ON CONFLICT UPDATE
 	query := `
-		INSERT INTO sessions (id, project_name, project_path, file_path, git_branch, 
+		INSERT OR REPLACE INTO sessions (id, project_name, project_path, file_path, git_branch, 
 			git_worktree, start_time, last_activity, is_active, status, model, 
 			message_count, duration_seconds) 
 		VALUES `
@@ -82,20 +82,7 @@ func (bo *BatchOperations) batchUpsertSessions(tx *sqlx.Tx, sessions []Session) 
 			session.MessageCount, session.DurationSeconds)
 	}
 	
-	query += strings.Join(values, ", ") + `
-		ON CONFLICT(id) DO UPDATE SET
-			project_name = EXCLUDED.project_name,
-			project_path = EXCLUDED.project_path,
-			file_path = EXCLUDED.file_path,
-			git_branch = EXCLUDED.git_branch,
-			git_worktree = EXCLUDED.git_worktree,
-			start_time = EXCLUDED.start_time,
-			last_activity = EXCLUDED.last_activity,
-			is_active = EXCLUDED.is_active,
-			status = EXCLUDED.status,
-			model = EXCLUDED.model,
-			message_count = EXCLUDED.message_count,
-			duration_seconds = EXCLUDED.duration_seconds`
+	query += strings.Join(values, ", ")
 
 	_, err := tx.Exec(query, args...)
 	return err
@@ -107,7 +94,7 @@ func (bo *BatchOperations) batchUpsertMessages(tx *sqlx.Tx, messages []Message) 
 	}
 
 	query := `
-		INSERT INTO messages (id, session_id, role, content, timestamp, parent_uuid) 
+		INSERT OR REPLACE INTO messages (id, session_id, role, content, timestamp, parent_uuid) 
 		VALUES `
 	
 	var values []string
@@ -127,13 +114,7 @@ func (bo *BatchOperations) batchUpsertMessages(tx *sqlx.Tx, messages []Message) 
 			msg.Timestamp, parentID)
 	}
 	
-	query += strings.Join(values, ", ") + `
-		ON CONFLICT(id) DO UPDATE SET
-			session_id = EXCLUDED.session_id,
-			role = EXCLUDED.role,
-			content = EXCLUDED.content,
-			timestamp = EXCLUDED.timestamp,
-			parent_uuid = EXCLUDED.parent_uuid`
+	query += strings.Join(values, ", ")
 
 	_, err := tx.Exec(query, args...)
 	return err
@@ -145,7 +126,7 @@ func (bo *BatchOperations) batchUpsertTokenUsages(tx *sqlx.Tx, tokenUsages []Tok
 	}
 
 	query := `
-		INSERT INTO token_usage (message_id, session_id, input_tokens, output_tokens, 
+		INSERT OR REPLACE INTO token_usage (message_id, session_id, input_tokens, output_tokens, 
 			cache_creation_input_tokens, cache_read_input_tokens, estimated_cost) 
 		VALUES `
 	
@@ -160,14 +141,7 @@ func (bo *BatchOperations) batchUpsertTokenUsages(tx *sqlx.Tx, tokenUsages []Tok
 			tu.CacheCreationInputTokens, tu.CacheReadInputTokens, tu.EstimatedCost)
 	}
 	
-	query += strings.Join(values, ", ") + `
-		ON CONFLICT(message_id) DO UPDATE SET
-			session_id = EXCLUDED.session_id,
-			input_tokens = EXCLUDED.input_tokens,
-			output_tokens = EXCLUDED.output_tokens,
-			cache_creation_input_tokens = EXCLUDED.cache_creation_input_tokens,
-			cache_read_input_tokens = EXCLUDED.cache_read_input_tokens,
-			estimated_cost = EXCLUDED.estimated_cost`
+	query += strings.Join(values, ", ")
 
 	_, err := tx.Exec(query, args...)
 	return err
@@ -179,7 +153,7 @@ func (bo *BatchOperations) batchUpsertToolResults(tx *sqlx.Tx, toolResults []Too
 	}
 
 	query := `
-		INSERT INTO tool_results (message_id, session_id, tool_name, result_data, 
+		INSERT OR REPLACE INTO tool_results (message_id, session_id, tool_name, result_data, 
 			file_path, timestamp) 
 		VALUES `
 	
