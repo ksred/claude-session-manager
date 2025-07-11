@@ -125,7 +125,7 @@ func (r *ReadOptimizedRepository) GetActiveSessionsOptimized() ([]*SessionSummar
 	return sessions, err
 }
 
-// executeInReadTransaction executes a function within a read-only transaction
+// executeInReadTransaction executes a function within a transaction optimized for reads
 func (r *ReadOptimizedRepository) executeInReadTransaction(fn func(*sqlx.Tx) error) error {
 	tx, err := r.db.Beginx()
 	if err != nil {
@@ -133,16 +133,13 @@ func (r *ReadOptimizedRepository) executeInReadTransaction(fn func(*sqlx.Tx) err
 	}
 	defer tx.Rollback()
 
-	// Set transaction to read-only mode for better concurrency
-	if _, err := tx.Exec("PRAGMA query_only = ON"); err != nil {
-		return fmt.Errorf("failed to set read-only mode: %w", err)
-	}
+	// Note: We don't use PRAGMA query_only because it affects the entire connection,
+	// not just the transaction, which can cause "readonly database" errors elsewhere
 
 	if err := fn(tx); err != nil {
 		return err
 	}
 
-	// Read-only transactions can still be committed
 	return tx.Commit()
 }
 

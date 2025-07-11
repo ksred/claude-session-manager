@@ -180,7 +180,7 @@ func (bo *BatchOperations) batchUpsertToolResults(tx *sqlx.Tx, toolResults []Too
 	return err
 }
 
-// ExecuteInReadTransaction executes a function within a read-only transaction
+// ExecuteInReadTransaction executes a function within a transaction optimized for reads
 func (bo *BatchOperations) ExecuteInReadTransaction(fn func(*sqlx.Tx) error) error {
 	tx, err := bo.db.Beginx()
 	if err != nil {
@@ -188,10 +188,8 @@ func (bo *BatchOperations) ExecuteInReadTransaction(fn func(*sqlx.Tx) error) err
 	}
 	defer tx.Rollback()
 
-	// Set transaction to read-only mode
-	if _, err := tx.Exec("PRAGMA query_only = ON"); err != nil {
-		return fmt.Errorf("failed to set read-only mode: %w", err)
-	}
+	// Note: We don't use PRAGMA query_only because it affects the entire connection,
+	// not just the transaction, which can cause "readonly database" errors elsewhere
 
 	if err := fn(tx); err != nil {
 		return err
