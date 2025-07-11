@@ -19,8 +19,16 @@ func CORSMiddleware(cfg *config.Config) gin.HandlerFunc {
 
 		// Check if origin is allowed
 		for _, allowed := range cfg.Server.CORS.AllowedOrigins {
-			if allowed == "*" || allowed == origin {
-				allowedOrigin = allowed
+			if allowed == "*" {
+				// When using credentials, we must echo the actual origin, not "*"
+				if cfg.Server.CORS.AllowCredentials && origin != "" {
+					allowedOrigin = origin
+				} else {
+					allowedOrigin = "*"
+				}
+				break
+			} else if allowed == origin {
+				allowedOrigin = origin
 				break
 			}
 		}
