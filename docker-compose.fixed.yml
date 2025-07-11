@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  claude-session-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    volumes:
+      # Mount as read-write and ensure proper permissions
+      - ~/.claude:/home/claude/.claude:rw
+      # Use a Docker volume for the database to avoid corruption
+      - claude-db:/home/claude/.claude/sessions
+    environment:
+      - PORT=8080
+      - ENV=production
+      - DB_PATH=/home/claude/.claude/sessions/sessions.db
+      # Enable WAL mode for better concurrency
+      - SQLITE_JOURNAL_MODE=WAL
+    restart: unless-stopped
+    # Run as the claude user (UID 1000)
+    user: "1000:1000"
+
+volumes:
+  # Named volume for database - more reliable than bind mounts
+  claude-db:
+    driver: local

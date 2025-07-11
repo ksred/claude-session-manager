@@ -25,6 +25,9 @@ FROM alpine:latest
 # Install ca-certificates for HTTPS
 RUN apk --no-cache add ca-certificates
 
+# Install sqlite for database management
+RUN apk --no-cache add sqlite
+
 # Create non-root user
 RUN addgroup -g 1000 -S claude && \
     adduser -u 1000 -S claude -G claude
@@ -35,8 +38,9 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /app/claude-session-manager .
 
-# Change ownership
-RUN chown -R claude:claude /app
+# Create directory for database with proper permissions
+RUN mkdir -p /home/claude/.claude/sessions && \
+    chown -R claude:claude /app /home/claude
 
 # Switch to non-root user
 USER claude

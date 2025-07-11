@@ -23,6 +23,7 @@ type Server struct {
 	sessionsMutex    sync.RWMutex
 	sessionWatcher   *claude.SessionWatcher
 	sessionRepo      *claude.SessionRepository
+	chatHandler      ChatMessageHandler
 }
 
 // NewServer creates a new API server instance

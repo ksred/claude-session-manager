@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/ksred/claude-session-manager/internal/chat"
 	"github.com/ksred/claude-session-manager/internal/config"
 	"github.com/ksred/claude-session-manager/internal/database"
 	"github.com/sirupsen/logrus"
@@ -24,6 +25,7 @@ type SQLiteServer struct {
 	sessionRepo    *database.SessionRepository
 	fileWatcher    *database.ClaudeFileWatcher
 	sqliteHandlers *SQLiteHandlers
+	chatHandler    *chat.WebSocketChatHandler
 	ctx            context.Context
 	cancel         context.CancelFunc
 	httpServer     *http.Server
@@ -77,6 +79,22 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Create chat components if WebSocket is enabled
+	var chatHandler *chat.WebSocketChatHandler
+	if cfg.Features.EnableWebSocket && wsHub != nil {
+		// Create chat repository (Database embeds *sqlx.DB, so we pass db directly)
+		chatRepo := chat.NewRepository(db.DB)
+		
+		// Create CLI manager
+		cliManager := chat.NewCLIManager(chatRepo)
+		
+		// Create chat handler
+		chatHandler = chat.NewWebSocketChatHandler(cliManager, chatRepo, logger)
+		
+		// Set the chat handler on the WebSocket hub
+		wsHub.ChatHandler = chatHandler
+	}
+
 	server := &SQLiteServer{
 		config:         cfg,
 		router:         router,
@@ -85,6 +103,7 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 		db:             db,
 		sessionRepo:    sessionRepo,
 		sqliteHandlers: NewSQLiteHandlers(sessionRepo, logger),
+		chatHandler:    chatHandler,
 		ctx:            ctx,
 		cancel:         cancel,
 	}

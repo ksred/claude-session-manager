@@ -177,6 +177,37 @@ LEFT JOIN (
     GROUP BY session_id
 ) fr ON s.id = fr.session_id;
 
+-- Chat sessions table - tracks active chat sessions with Claude CLI
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    process_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'active', -- active, inactive, terminated, error
+    started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_activity DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+-- Chat messages table - stores messages in chat sessions
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY,
+    chat_session_id TEXT NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('user', 'claude', 'system')),
+    content TEXT NOT NULL,
+    timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    metadata TEXT, -- JSON metadata
+    FOREIGN KEY (chat_session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+);
+
+-- Indexes for chat tables
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_session_id ON chat_sessions(session_id);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_status ON chat_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_last_activity ON chat_sessions(last_activity DESC);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_session_id ON chat_messages(chat_session_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_timestamp ON chat_messages(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_type ON chat_messages(type);
+
 -- Daily metrics view
 CREATE VIEW IF NOT EXISTS daily_metrics AS
 SELECT 

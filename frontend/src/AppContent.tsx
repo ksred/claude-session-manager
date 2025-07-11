@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { AppLayout } from './components/Layout/AppLayout';
 import { SessionSidebar } from './components/Sidebar/SessionSidebar';
-import { MainDashboard } from './components/Dashboard/MainDashboard';
+import { SessionDetailView } from './components/Dashboard/SessionDetailView';
 import { ProjectDashboard } from './components/Dashboard/ProjectDashboard';
 import { AnalyticsDashboard } from './components/Analytics/AnalyticsDashboard';
 import { LoadingState } from './components/Common/LoadingState';
@@ -28,6 +28,7 @@ export const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<'session' | 'project' | 'analytics'>('session');
   const [timeRange, setTimeRange] = useState(168);
   const [timeGranularity, setTimeGranularity] = useState<'minute' | 'hour' | 'day'>('minute');
+  const [showTerminal] = useState(true); // Enable terminal chat feature
 
   // API data hooks
   const { data: sessionsData, isLoading: sessionsLoading, error: sessionsError } = useAllSessions();
@@ -197,7 +198,7 @@ export const AppContent: React.FC = () => {
       }
       main={
         currentView === 'session' ? (
-          <MainDashboard
+          <SessionDetailView
             selectedSession={selectedSession}
             recentActivity={recentActivity}
             chartData={chartData}
@@ -208,6 +209,7 @@ export const AppContent: React.FC = () => {
             onTimeRangeChange={setTimeRange}
             onTimeGranularityChange={setTimeGranularity}
             onRefresh={handleRefresh}
+            showTerminal={showTerminal}
           />
         ) : currentView === 'project' ? (
           <ProjectDashboard
