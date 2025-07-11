@@ -303,8 +303,8 @@ func (i *IncrementalImporter) processFile(fileInfo FileToProcess) (int, int, err
 	// Mark file as being processed
 	i.markFileProcessing(fileInfo.FilePath, fileInfo.ModTime, int64(fileInfo.SizeMB*1024*1024))
 	
-	// Import the file using batch operations
-	sessions, messages, err := batchImporter.ImportJSONLFileOptimized(fileInfo.FilePath, fileInfo.ProjectInfo)
+	// Import the file using incremental batch operations
+	sessions, messages, err := batchImporter.ImportJSONLFileIncremental(fileInfo.FilePath, fileInfo.ProjectInfo)
 	if err != nil {
 		i.markFileError(fileInfo.FilePath, err.Error())
 		return 0, 0, err
