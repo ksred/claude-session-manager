@@ -357,6 +357,18 @@ export const useWebSocket = () => {
               console.log('✅ WebSocket subscription confirmed');
               break;
               
+            // Chat message types
+            case 'chat:session:start':
+            case 'chat:session:end':
+            case 'chat:message:send':
+            case 'chat:message:receive':
+            case 'chat:typing:start':
+            case 'chat:typing:stop':
+            case 'chat:error':
+              // Forward chat messages to window for TerminalChat to handle
+              window.postMessage(event.data, window.location.origin);
+              break;
+              
             default:
               console.log('Unknown WebSocket message type:', message.type);
           }

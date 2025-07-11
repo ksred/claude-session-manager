@@ -47,7 +47,7 @@ docker-run: ## Run Docker container locally
 	docker run -d \
 		--name $(IMAGE_NAME) \
 		-p 80:80 \
-		-v ~/.claude:/root/.claude:ro \
+		-v ~/.claude:/data/.claude:rw \
 		$(FULL_IMAGE_NAME):$(VERSION)
 	@echo "Container started. Access the application at http://localhost"
 

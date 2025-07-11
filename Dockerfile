@@ -44,15 +44,17 @@ LABEL org.opencontainers.image.title="Claude Session Manager" \
       org.opencontainers.image.vendor="ksred" \
       org.opencontainers.image.licenses="MIT"
 
-# Install nginx and supervisor
-RUN apk --no-cache add ca-certificates nginx supervisor
+# Install nginx, supervisor, and sqlite tools
+RUN apk --no-cache add ca-certificates nginx supervisor sqlite
 
 # Create user
 RUN addgroup -g 1000 -S claude && \
     adduser -u 1000 -S claude -G claude
 
-# Setup directories
-RUN mkdir -p /app/backend /app/frontend /var/log/supervisor /run/nginx /data
+# Setup directories with proper permissions
+RUN mkdir -p /app/backend /app/frontend /var/log/supervisor /run/nginx /data/claude && \
+    chmod 755 /data && \
+    chmod 755 /data/claude
 
 # Copy backend binary
 COPY --from=backend-builder /backend/claude-session-manager /app/backend/
@@ -78,7 +80,7 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-environment=PORT="8080",CLAUDE_DIR="/data/claude"
+environment=PORT="8080",CLAUDE_DIR="/data/claude",SQLITE_JOURNAL_MODE="WAL",SQLITE_BUSY_TIMEOUT="10000"
 
 [program:nginx]
 command=nginx -g 'daemon off;'
@@ -90,22 +92,35 @@ stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 EOF
 
-# Set permissions
-RUN chown -R claude:claude /app && \
+# Set permissions - ensure data directory is writable by backend user
+RUN chown -R claude:claude /app /data && \
     chown -R nginx:nginx /var/lib/nginx /var/log/nginx /run/nginx && \
-    chmod +x /app/backend/claude-session-manager && \
-    chmod 777 /data
+    chmod +x /app/backend/claude-session-manager
 
 # Expose port 80 for nginx
 EXPOSE 80
 
-# Create startup script
+# Create startup script with database integrity check
 RUN cat > /app/start.sh <<'EOF'
 #!/bin/sh
 # Set CLAUDE_DIR from environment or default to /data/claude
 export CLAUDE_DIR="${CLAUDE_DIR:-/data/claude}"
 echo "Starting Claude Session Manager..."
 echo "Using Claude directory: $CLAUDE_DIR"
+
+# Ensure database directory exists and has correct permissions
+mkdir -p "$CLAUDE_DIR"
+chown -R claude:claude "$CLAUDE_DIR"
+
+# Check database integrity if it exists
+if [ -f "$CLAUDE_DIR/sessions.db" ]; then
+    echo "Checking database integrity..."
+    sqlite3 "$CLAUDE_DIR/sessions.db" "PRAGMA integrity_check;" || {
+        echo "Database corruption detected, creating backup..."
+        mv "$CLAUDE_DIR/sessions.db" "$CLAUDE_DIR/sessions.db.corrupt.$(date +%Y%m%d_%H%M%S)"
+    }
+fi
+
 echo "Backend will be available at http://localhost:8080"
 echo "Frontend will be available at http://localhost"
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
