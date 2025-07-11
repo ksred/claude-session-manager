@@ -33,11 +33,17 @@ type WebSocketClient struct {
 
 // WebSocketHub maintains active WebSocket connections
 type WebSocketHub struct {
-	clients    map[*WebSocketClient]bool
-	broadcast  chan []byte
-	register   chan *WebSocketClient
-	unregister chan *WebSocketClient
-	logger     *logrus.Logger
+	clients     map[*WebSocketClient]bool
+	broadcast   chan []byte
+	register    chan *WebSocketClient
+	unregister  chan *WebSocketClient
+	logger      *logrus.Logger
+	ChatHandler ChatMessageHandler
+}
+
+// ChatMessageHandler interface for handling chat messages
+type ChatMessageHandler interface {
+	HandleMessage(clientID string, msgType string, msg map[string]interface{}, broadcastFn func(string, interface{})) error
 }
 
 // NewWebSocketHub creates a new WebSocket hub
@@ -236,6 +242,19 @@ func (c *WebSocketClient) readPump() {
 				if ackData, err := json.Marshal(ack); err == nil {
 					c.Logger.WithField("client_id", c.ID).Debug("Sending subscription acknowledgment")
 					c.Send <- ackData
+				}
+			case "chat:session:start", "chat:session:end", "chat:message:send", "chat:typing:start", "chat:typing:stop":
+				// Handle chat messages through the chat handler
+				if c.Hub.ChatHandler != nil {
+					err := c.Hub.ChatHandler.HandleMessage(c.ID, msgType, msg, c.Hub.BroadcastUpdate)
+					if err != nil {
+						c.Logger.WithError(err).WithFields(logrus.Fields{
+							"client_id":    c.ID,
+							"message_type": msgType,
+						}).Error("Failed to handle chat message")
+					}
+				} else {
+					c.Logger.WithField("type", msgType).Warn("Received chat message but no chat handler configured")
 				}
 			default:
 				c.Logger.WithField("type", msgType).Debug("Received unknown message type")

@@ -634,6 +634,7 @@ func (h *SQLiteHandlers) GetTokenTimelineHandler(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path string true "Session ID"
+// @Param hours query int false "Number of hours to look back (default: 24, max: 8760)"
 // @Param granularity query string false "Time granularity: minute, hour, day (default: minute)"
 // @Success 200 {object} TokenTimelineResponse "Successfully retrieved session token timeline"
 // @Failure 400 {object} ErrorResponse "Invalid parameters"
@@ -654,7 +655,17 @@ func (h *SQLiteHandlers) GetSessionTokenTimelineHandler(c *gin.Context) {
 		granularity = "minute"
 	}
 
-	timeline, err := h.repo.GetSessionTokenTimeline(sessionID, granularity)
+	// Parse hours parameter, default to 24 hours
+	hoursStr := c.DefaultQuery("hours", "24")
+	hours, err := strconv.Atoi(hoursStr)
+	if err != nil || hours <= 0 {
+		hours = 24
+	}
+	if hours > 8760 { // Max 1 year
+		hours = 8760
+	}
+
+	timeline, err := h.repo.GetSessionTokenTimeline(sessionID, hours, granularity)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get session token timeline")
 		c.JSON(http.StatusInternalServerError, gin.H{
