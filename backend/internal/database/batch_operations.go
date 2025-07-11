@@ -64,26 +64,38 @@ func (bo *BatchOperations) batchUpsertSessions(tx *sqlx.Tx, sessions []Session) 
 
 	// Build batch insert with ON CONFLICT UPDATE
 	query := `
-		INSERT INTO sessions (id, project_name, project_path, git_branch, start_time) 
+		INSERT INTO sessions (id, project_name, project_path, file_path, git_branch, 
+			git_worktree, start_time, last_activity, is_active, status, model, 
+			message_count, duration_seconds) 
 		VALUES `
 	
 	var values []string
 	var args []interface{}
 	
 	for i, session := range sessions {
-		placeholders := fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)",
-			i*5+1, i*5+2, i*5+3, i*5+4, i*5+5)
+		placeholders := fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+			i*13+1, i*13+2, i*13+3, i*13+4, i*13+5, i*13+6, i*13+7, i*13+8, i*13+9, i*13+10, i*13+11, i*13+12, i*13+13)
 		values = append(values, placeholders)
 		args = append(args, session.ID, session.ProjectName, session.ProjectPath, 
-			session.GitBranch, session.StartTime)
+			session.FilePath, session.GitBranch, session.GitWorktree, session.StartTime,
+			session.LastActivity, session.IsActive, session.Status, session.Model,
+			session.MessageCount, session.DurationSeconds)
 	}
 	
 	query += strings.Join(values, ", ") + `
 		ON CONFLICT(id) DO UPDATE SET
 			project_name = EXCLUDED.project_name,
 			project_path = EXCLUDED.project_path,
+			file_path = EXCLUDED.file_path,
 			git_branch = EXCLUDED.git_branch,
-			start_time = EXCLUDED.start_time`
+			git_worktree = EXCLUDED.git_worktree,
+			start_time = EXCLUDED.start_time,
+			last_activity = EXCLUDED.last_activity,
+			is_active = EXCLUDED.is_active,
+			status = EXCLUDED.status,
+			model = EXCLUDED.model,
+			message_count = EXCLUDED.message_count,
+			duration_seconds = EXCLUDED.duration_seconds`
 
 	_, err := tx.Exec(query, args...)
 	return err

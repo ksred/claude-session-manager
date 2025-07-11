@@ -70,11 +70,22 @@ func (bi *BatchImporter) ImportJSONLFileOptimized(filePath string, projectInfo P
 		// Create or update session
 		if session, exists := sessionMap[sessionID]; !exists {
 			session = &Session{
-				ID:          sessionID,
-				ProjectPath: projectInfo.ProjectPath,
-				ProjectName: projectInfo.ProjectName,
-				FilePath:    filePath,
-				StartTime:   msg.Timestamp,
+				ID:             sessionID,
+				ProjectPath:    projectInfo.ProjectPath,
+				ProjectName:    projectInfo.ProjectName,
+				FilePath:       filePath,
+				GitBranch:      "", // Will be populated if available
+				GitWorktree:    "", // Will be populated if available
+				StartTime:      msg.Timestamp,
+				LastActivity:   msg.Timestamp,
+				IsActive:       false,
+				Status:         "completed",
+				Model:          "",
+				MessageCount:   1,
+				DurationSeconds: 0,
+			}
+			if msg.Message.Model != nil {
+				session.Model = *msg.Message.Model
 			}
 			sessionMap[sessionID] = session
 		} else {
