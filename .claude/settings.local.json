@@ -9,7 +9,10 @@
       "Bash(done)",
       "Bash(sqlite3:*)",
       "Bash(./import-file:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(./test_claude_output.sh:*)",
+      "Bash(./test_claude_interactive.sh:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }

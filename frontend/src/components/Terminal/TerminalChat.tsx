@@ -34,6 +34,7 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
     isTyping: false,
     status: 'idle',
   });
+  const sessionStartedRef = useRef(false);
   const [input, setInput] = useState('');
   const [isComposing, setIsComposing] = useState(false);
   
@@ -55,18 +56,6 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
     inputRef.current?.focus();
   }, []);
 
-  // Update connection status
-  useEffect(() => {
-    setState(prev => ({ ...prev, isConnected }));
-  }, [isConnected]);
-
-  // Start chat session when component mounts
-  useEffect(() => {
-    if (isConnected && state.status === 'idle') {
-      startChatSession();
-    }
-  }, [isConnected, state.status]);
-
   // Start a new chat session
   const startChatSession = useCallback(() => {
     setState(prev => ({ ...prev, status: 'starting' }));
@@ -75,6 +64,19 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
       session_id: sessionId,
     });
   }, [sessionId, sendMessage]);
+
+  // Update connection status
+  useEffect(() => {
+    setState(prev => ({ ...prev, isConnected }));
+  }, [isConnected]);
+
+  // Start chat session when component mounts
+  useEffect(() => {
+    if (isConnected && state.status === 'idle' && !sessionStartedRef.current) {
+      sessionStartedRef.current = true;
+      startChatSession();
+    }
+  }, [isConnected, state.status, startChatSession]);
 
   // End chat session on unmount
   useEffect(() => {

@@ -240,6 +240,37 @@ export const useWebSocket = () => {
                         });
                       }
                     );
+                    
+                    // IMPORTANT: Also invalidate session-specific activity
+                    debouncedInvalidator.current.debounceInvalidation(
+                      `session-activity-${sessionId}`,
+                      () => {
+                        queryClient.invalidateQueries({ 
+                          queryKey: ['activity', 'session', sessionId] 
+                        });
+                      }
+                    );
+                    
+                    // Invalidate project-specific data if project name is available
+                    if (updatedSession.project_name) {
+                      debouncedInvalidator.current.debounceInvalidation(
+                        `project-timeline-${updatedSession.project_name}`,
+                        () => {
+                          queryClient.invalidateQueries({ 
+                            queryKey: sessionKeys.projectTokenTimeline(updatedSession.project_name) 
+                          });
+                        }
+                      );
+                      
+                      debouncedInvalidator.current.debounceInvalidation(
+                        `project-activity-${updatedSession.project_name}`,
+                        () => {
+                          queryClient.invalidateQueries({ 
+                            queryKey: ['activity', 'project', updatedSession.project_name] 
+                          });
+                        }
+                      );
+                    }
                   }).catch(error => {
                     console.error('❌ Failed to fetch updated session data:', error);
                     // Fall back to invalidating queries if fetch fails
@@ -250,6 +281,14 @@ export const useWebSocket = () => {
                     debouncedInvalidator.current.debounceInvalidation(
                       'sessions-all',
                       () => queryClient.invalidateQueries({ queryKey: sessionKeys.all })
+                    );
+                    debouncedInvalidator.current.debounceInvalidation(
+                      `session-timeline-${sessionId}`,
+                      () => queryClient.invalidateQueries({ queryKey: sessionKeys.sessionTokenTimeline(sessionId) })
+                    );
+                    debouncedInvalidator.current.debounceInvalidation(
+                      `session-activity-${sessionId}`,
+                      () => queryClient.invalidateQueries({ queryKey: ['activity', 'session', sessionId] })
                     );
                       });
                     });
@@ -276,6 +315,30 @@ export const useWebSocket = () => {
                 'activity',
                 () => queryClient.invalidateQueries({ queryKey: sessionKeys.activity() })
               );
+              
+              // If the activity is tied to a specific session, invalidate session-specific activity
+              if (message.data?.session_id) {
+                const sessionId = message.data.session_id;
+                debouncedInvalidator.current.debounceInvalidation(
+                  `session-activity-${sessionId}`,
+                  () => queryClient.invalidateQueries({ queryKey: ['activity', 'session', sessionId] })
+                );
+                
+                // Also trigger a session update to refresh files_modified list
+                debouncedInvalidator.current.debounceInvalidation(
+                  `session-detail-activity-${sessionId}`,
+                  () => queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) })
+                );
+              }
+              
+              // If the activity is tied to a project, invalidate project-specific activity
+              if (message.data?.project_name) {
+                const projectName = message.data.project_name;
+                debouncedInvalidator.current.debounceInvalidation(
+                  `project-activity-${projectName}`,
+                  () => queryClient.invalidateQueries({ queryKey: ['activity', 'project', projectName] })
+                );
+              }
               
               // If it's a file modification, also update recent files
               if (message.data?.activity?.type === 'file_modified') {

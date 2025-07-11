@@ -78,6 +78,11 @@ func (h *WebSocketChatHandler) handleSessionStart(clientID string, msg map[strin
 
 	// Start monitoring the CLI process for output
 	go h.monitorCLIOutput(sessionID, broadcastFn)
+	
+	h.logger.WithFields(logrus.Fields{
+		"session_id": sessionID,
+		"process_id": chatSession.ProcessID,
+	}).Info("CLI monitoring started")
 
 	// Send session started confirmation
 	startMsg := WebSocketMessage{
@@ -162,13 +167,21 @@ func (h *WebSocketChatHandler) handleMessageSend(clientID string, msg map[string
 		"client_id":  clientID,
 		"session_id": sessionID,
 		"content":    content[:min(len(content), 100)], // Log first 100 chars
+		"full_len":   len(content),
 	}).Info("Sending message to Claude CLI")
 
 	// Get the chat session
 	chatSession, err := h.repository.GetChatSessionBySessionID(sessionID)
 	if err != nil || chatSession == nil {
+		h.logger.WithError(err).Error("No active chat session found")
 		return fmt.Errorf("no active chat session found for session %s", sessionID)
 	}
+
+	h.logger.WithFields(logrus.Fields{
+		"chat_session_id": chatSession.ID,
+		"process_id":      chatSession.ProcessID,
+		"status":          chatSession.Status,
+	}).Debug("Found chat session")
 
 	// Store the user message in database
 	userMessage, err := h.repository.CreateChatMessage(chatSession.ID, MessageTypeUser, content, map[string]interface{}{
@@ -179,6 +192,8 @@ func (h *WebSocketChatHandler) handleMessageSend(clientID string, msg map[string
 		// Continue processing even if storage fails
 	}
 
+	h.logger.Info("About to send message to CLI process via CLIManager")
+	
 	// Send message to CLI process
 	err = h.cliManager.SendMessage(sessionID, content)
 	if err != nil {
@@ -201,6 +216,11 @@ func (h *WebSocketChatHandler) handleMessageSend(clientID string, msg map[string
 		broadcastFn(WSMsgChatError, errorMsg)
 		return err
 	}
+
+	h.logger.WithFields(logrus.Fields{
+		"session_id": sessionID,
+		"content":    content[:min(len(content), 50)],
+	}).Info("Successfully sent message to CLI process")
 
 	// Update session activity
 	h.repository.UpdateChatSessionActivity(chatSession.ID)
@@ -272,9 +292,18 @@ func (h *WebSocketChatHandler) monitorCLIOutput(sessionID string, broadcastFn fu
 	ticker := time.NewTicker(100 * time.Millisecond) // Check for output every 100ms
 	defer ticker.Stop()
 
+	checkCount := 0
 	for {
 		select {
 		case <-ticker.C:
+			checkCount++
+			if checkCount%50 == 0 { // Log every 5 seconds
+				h.logger.WithFields(logrus.Fields{
+					"session_id": sessionID,
+					"checks":     checkCount,
+				}).Debug("Still monitoring CLI output")
+			}
+			
 			// Check for output from CLI process
 			outputs, err := h.cliManager.GetProcessOutput(sessionID)
 			if err != nil {
@@ -283,6 +312,13 @@ func (h *WebSocketChatHandler) monitorCLIOutput(sessionID string, broadcastFn fu
 			}
 
 			// Process each output line
+			if len(outputs) > 0 {
+				h.logger.WithFields(logrus.Fields{
+					"session_id": sessionID,
+					"count":      len(outputs),
+				}).Info("Got outputs from CLI process")
+			}
+			
 			for _, output := range outputs {
 				if output == "" {
 					continue
@@ -291,7 +327,8 @@ func (h *WebSocketChatHandler) monitorCLIOutput(sessionID string, broadcastFn fu
 				h.logger.WithFields(logrus.Fields{
 					"session_id": sessionID,
 					"output":     output[:min(len(output), 100)],
-				}).Debug("Received CLI output")
+					"full_len":   len(output),
+				}).Info("Received CLI output")
 
 				// Get chat session for storing message
 				chatSession, err := h.repository.GetChatSessionBySessionID(sessionID)

@@ -1,0 +1,11 @@
+--- a/backend/internal/api/server_sqlite.go
++++ b/backend/internal/api/server_sqlite.go
+@@ -83,7 +83,7 @@
+ 	var chatHandler *chat.WebSocketChatHandler
+ 	if cfg.Features.EnableWebSocket && wsHub != nil {
+ 		// Create chat repository (Database embeds *sqlx.DB, so we pass db directly)
+-		chatRepo := chat.NewRepository(db.DB)
++		chatRepo := chat.NewRepository(db.DB)
+ 		
+ 		// Create CLI manager
+ 		cliManager := chat.NewCLIManager(chatRepo)
