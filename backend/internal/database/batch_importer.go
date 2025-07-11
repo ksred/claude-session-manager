@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -64,7 +65,9 @@ func (bi *BatchImporter) ImportJSONLFileOptimized(filePath string, projectInfo P
 
 		sessionID := msg.SessionID
 		if sessionID == "" {
-			sessionID = strings.TrimSuffix(filePath, ".jsonl")
+			// Extract UUID from filename (e.g., "bd16b52b-ab7d-4a22-b09b-8b1bd2c77a94.jsonl")
+			baseName := filepath.Base(filePath)
+			sessionID = strings.TrimSuffix(baseName, ".jsonl")
 		}
 
 		// Create or update session

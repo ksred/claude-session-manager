@@ -28,6 +28,7 @@ func (bo *BatchOperations) BatchImportData(sessions []Session, messages []Messag
 
 	// Batch insert sessions
 	if len(sessions) > 0 {
+		fmt.Printf("Inserting %d sessions\n", len(sessions))
 		if err := bo.batchUpsertSessions(tx, sessions); err != nil {
 			return fmt.Errorf("failed to batch upsert sessions: %w", err)
 		}
@@ -35,6 +36,7 @@ func (bo *BatchOperations) BatchImportData(sessions []Session, messages []Messag
 
 	// Batch insert messages
 	if len(messages) > 0 {
+		fmt.Printf("Inserting %d messages\n", len(messages))
 		if err := bo.batchUpsertMessages(tx, messages); err != nil {
 			return fmt.Errorf("failed to batch upsert messages: %w", err)
 		}
@@ -54,7 +56,11 @@ func (bo *BatchOperations) BatchImportData(sessions []Session, messages []Messag
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	fmt.Println("Transaction committed successfully")
+	return nil
 }
 
 func (bo *BatchOperations) batchUpsertSessions(tx *sqlx.Tx, sessions []Session) error {
@@ -72,9 +78,8 @@ func (bo *BatchOperations) batchUpsertSessions(tx *sqlx.Tx, sessions []Session) 
 	var values []string
 	var args []interface{}
 	
-	for i, session := range sessions {
-		placeholders := fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
-			i*13+1, i*13+2, i*13+3, i*13+4, i*13+5, i*13+6, i*13+7, i*13+8, i*13+9, i*13+10, i*13+11, i*13+12, i*13+13)
+	for _, session := range sessions {
+		placeholders := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 		values = append(values, placeholders)
 		args = append(args, session.ID, session.ProjectName, session.ProjectPath, 
 			session.FilePath, session.GitBranch, session.GitWorktree, session.StartTime,
@@ -93,31 +98,56 @@ func (bo *BatchOperations) batchUpsertMessages(tx *sqlx.Tx, messages []Message) 
 		return nil
 	}
 
-	query := `
-		INSERT OR REPLACE INTO messages (id, session_id, role, content, timestamp, parent_uuid) 
-		VALUES `
+	// SQLite has a limit of 999 parameters, so batch the inserts
+	const batchSize = 100 // 100 messages × 6 params = 600 params (safe under 999 limit)
 	
-	var values []string
-	var args []interface{}
-	
-	for i, msg := range messages {
-		placeholders := fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d)",
-			i*6+1, i*6+2, i*6+3, i*6+4, i*6+5, i*6+6)
-		values = append(values, placeholders)
+	for i := 0; i < len(messages); i += batchSize {
+		end := i + batchSize
+		if end > len(messages) {
+			end = len(messages)
+		}
+		batch := messages[i:end]
 		
-		var parentID interface{} = sql.NullString{}
-		if msg.ParentUUID != nil {
-			parentID = *msg.ParentUUID
+		query := `
+			INSERT OR REPLACE INTO messages (id, session_id, role, content, timestamp, parent_uuid) 
+			VALUES `
+		
+		var values []string
+		var args []interface{}
+		
+		for _, msg := range batch {
+			placeholders := "(?, ?, ?, ?, ?, ?)"
+			values = append(values, placeholders)
+			
+			var parentID interface{} = sql.NullString{}
+			if msg.ParentUUID != nil {
+				parentID = *msg.ParentUUID
+			}
+			
+			args = append(args, msg.ID, msg.SessionID, msg.Role, msg.Content,
+				msg.Timestamp, parentID)
 		}
 		
-		args = append(args, msg.ID, msg.SessionID, msg.Role, msg.Content,
-			msg.Timestamp, parentID)
+		query += strings.Join(values, ", ")
+		
+		if i == 0 {
+			fmt.Printf("Messages batch size: %d, total batches: %d\n", batchSize, (len(messages)+batchSize-1)/batchSize)
+			// Check first few message IDs
+			for j := 0; j < 3 && j < len(batch); j++ {
+				fmt.Printf("Message %d ID: %s\n", j, batch[j].ID)
+			}
+		}
+		
+		result, err := tx.Exec(query, args...)
+		if err != nil {
+			return fmt.Errorf("failed to insert message batch %d: %w", i/batchSize, err)
+		}
+		
+		rowsAffected, _ := result.RowsAffected()
+		fmt.Printf("Batch %d: inserted/updated %d rows\n", i/batchSize, rowsAffected)
 	}
 	
-	query += strings.Join(values, ", ")
-
-	_, err := tx.Exec(query, args...)
-	return err
+	return nil
 }
 
 func (bo *BatchOperations) batchUpsertTokenUsages(tx *sqlx.Tx, tokenUsages []TokenUsage) error {
@@ -125,26 +155,39 @@ func (bo *BatchOperations) batchUpsertTokenUsages(tx *sqlx.Tx, tokenUsages []Tok
 		return nil
 	}
 
-	query := `
-		INSERT OR REPLACE INTO token_usage (message_id, session_id, input_tokens, output_tokens, 
-			cache_creation_input_tokens, cache_read_input_tokens, total_tokens, estimated_cost) 
-		VALUES `
+	// SQLite has a limit of 999 parameters, so batch the inserts
+	const batchSize = 100 // 100 records × 8 params = 800 params (safe under 999 limit)
 	
-	var values []string
-	var args []interface{}
-	
-	for i, tu := range tokenUsages {
-		placeholders := fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
-			i*8+1, i*8+2, i*8+3, i*8+4, i*8+5, i*8+6, i*8+7, i*8+8)
-		values = append(values, placeholders)
-		args = append(args, tu.MessageID, tu.SessionID, tu.InputTokens, tu.OutputTokens,
-			tu.CacheCreationInputTokens, tu.CacheReadInputTokens, tu.TotalTokens, tu.EstimatedCost)
+	for i := 0; i < len(tokenUsages); i += batchSize {
+		end := i + batchSize
+		if end > len(tokenUsages) {
+			end = len(tokenUsages)
+		}
+		batch := tokenUsages[i:end]
+		
+		query := `
+			INSERT OR REPLACE INTO token_usage (message_id, session_id, input_tokens, output_tokens, 
+				cache_creation_input_tokens, cache_read_input_tokens, total_tokens, estimated_cost) 
+			VALUES `
+		
+		var values []string
+		var args []interface{}
+		
+		for _, tu := range batch {
+			placeholders := "(?, ?, ?, ?, ?, ?, ?, ?)"
+			values = append(values, placeholders)
+			args = append(args, tu.MessageID, tu.SessionID, tu.InputTokens, tu.OutputTokens,
+				tu.CacheCreationInputTokens, tu.CacheReadInputTokens, tu.TotalTokens, tu.EstimatedCost)
+		}
+		
+		query += strings.Join(values, ", ")
+
+		if _, err := tx.Exec(query, args...); err != nil {
+			return fmt.Errorf("failed to insert token usage batch %d: %w", i/batchSize, err)
+		}
 	}
 	
-	query += strings.Join(values, ", ")
-
-	_, err := tx.Exec(query, args...)
-	return err
+	return nil
 }
 
 func (bo *BatchOperations) batchUpsertToolResults(tx *sqlx.Tx, toolResults []ToolResult) error {
@@ -160,9 +203,8 @@ func (bo *BatchOperations) batchUpsertToolResults(tx *sqlx.Tx, toolResults []Too
 	var values []string
 	var args []interface{}
 	
-	for i, tr := range toolResults {
-		placeholders := fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d)",
-			i*6+1, i*6+2, i*6+3, i*6+4, i*6+5, i*6+6)
+	for _, tr := range toolResults {
+		placeholders := "(?, ?, ?, ?, ?, ?)"
 		values = append(values, placeholders)
 		
 		var filePath interface{} = sql.NullString{}

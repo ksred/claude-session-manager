@@ -18,7 +18,7 @@ func NewReadOptimizedRepository(db *Database) *ReadOptimizedRepository {
 }
 
 // GetSessionTokenTimelineOptimized returns token usage over time for a specific session using read-only transaction
-func (r *ReadOptimizedRepository) GetSessionTokenTimelineOptimized(sessionID string, granularity string) ([]TokenTimelineEntry, error) {
+func (r *ReadOptimizedRepository) GetSessionTokenTimelineOptimized(sessionID string, hours int, granularity string) ([]TokenTimelineEntry, error) {
 	var entries []TokenTimelineEntry
 	
 	// Execute in read-only transaction
@@ -49,11 +49,12 @@ func (r *ReadOptimizedRepository) GetSessionTokenTimelineOptimized(sessionID str
 			FROM messages m
 			LEFT JOIN token_usage tu ON m.id = tu.message_id
 			WHERE m.session_id = ?
+			AND m.timestamp >= datetime('now', '-' || ? || ' hours')
 			GROUP BY strftime(?, m.timestamp)
 			ORDER BY timestamp ASC
 		`
 
-		return tx.Select(&entries, query, timeFormat, sessionID, timeFormat)
+		return tx.Select(&entries, query, timeFormat, sessionID, hours, timeFormat)
 	})
 	
 	return entries, err

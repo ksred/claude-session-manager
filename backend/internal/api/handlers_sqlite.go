@@ -636,6 +636,7 @@ func (h *SQLiteHandlers) GetTokenTimelineHandler(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path string true "Session ID"
+// @Param hours query int false "Number of hours to look back (default: 168)"
 // @Param granularity query string false "Time granularity: minute, hour, day (default: minute)"
 // @Success 200 {object} TokenTimelineResponse "Successfully retrieved session token timeline"
 // @Failure 400 {object} ErrorResponse "Invalid parameters"
@@ -651,12 +652,27 @@ func (h *SQLiteHandlers) GetSessionTokenTimelineHandler(c *gin.Context) {
 		return
 	}
 
+	// Parse hours parameter with default of 168 (1 week)
+	hours := 168
+	if hoursStr := c.Query("hours"); hoursStr != "" {
+		if parsedHours, err := strconv.Atoi(hoursStr); err == nil && parsedHours > 0 {
+			hours = parsedHours
+		}
+	}
+
 	granularity := c.DefaultQuery("granularity", "minute")
 	if granularity != "minute" && granularity != "hour" && granularity != "day" {
 		granularity = "minute"
 	}
 
-	timeline, err := h.readOptimized.GetSessionTokenTimelineOptimized(sessionID, granularity)
+	// Log the request parameters
+	h.logger.WithFields(logrus.Fields{
+		"session_id":  sessionID,
+		"hours":       hours,
+		"granularity": granularity,
+	}).Debug("Getting session token timeline")
+
+	timeline, err := h.readOptimized.GetSessionTokenTimelineOptimized(sessionID, hours, granularity)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get session token timeline")
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -664,6 +680,14 @@ func (h *SQLiteHandlers) GetSessionTokenTimelineHandler(c *gin.Context) {
 		})
 		return
 	}
+
+	// Log the result count
+	h.logger.WithFields(logrus.Fields{
+		"session_id":    sessionID,
+		"timeline_count": len(timeline),
+		"hours":         hours,
+		"granularity":   granularity,
+	}).Debug("Retrieved session token timeline")
 
 	// If no timeline data, check if session exists
 	if len(timeline) == 0 {
