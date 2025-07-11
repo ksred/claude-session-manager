@@ -16,6 +16,11 @@ type SessionRepository struct {
 	logger *logrus.Logger
 }
 
+// GetDB returns the underlying database connection
+func (r *SessionRepository) GetDB() *Database {
+	return r.db
+}
+
 // NewSessionRepository creates a new session repository
 func NewSessionRepository(db *Database, logger *logrus.Logger) *SessionRepository {
 	return &SessionRepository{
