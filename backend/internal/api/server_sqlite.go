@@ -117,8 +117,12 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 		}()
 	}
 
+	// Create completion channel for import process
+	importDone := make(chan struct{})
+
 	// Import existing data (this can take a while) - run in background
 	go func() {
+		defer close(importDone)
 		logger.Info("Import goroutine started")
 		logger.Info("Starting background import of existing session data (press Ctrl+C to cancel)")
 		if err := server.importExistingData(); err != nil {
@@ -133,7 +137,7 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 		logger.Info("Import goroutine exited")
 	}()
 
-	// Setup file watcher if enabled - but start it after import to avoid database locks
+	// Setup file watcher if enabled - start it after import completes
 	if cfg.Features.EnableFileWatcher {
 		go func() {
 			logger.Info("File watcher setup goroutine started")
@@ -143,14 +147,14 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 				logger.Info("File watcher setup cancelled due to shutdown")
 				logger.Info("File watcher setup goroutine exited")
 				return
-			case <-time.After(2 * time.Minute):
+			case <-importDone:
 				// Check context again before proceeding
 				if ctx.Err() != nil {
 					logger.Info("File watcher setup cancelled due to shutdown")
 					logger.Info("File watcher setup goroutine exited")
 					return
 				}
-				logger.Info("Starting file watcher after import delay")
+				logger.Info("Starting file watcher after import completion")
 				if err := server.setupFileWatcher(); err != nil {
 					logger.WithError(err).Error("Failed to setup file watcher")
 				}
