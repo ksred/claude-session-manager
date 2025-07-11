@@ -7,7 +7,8 @@
       "Bash(for file in ~/.claude/projects/*/*.jsonl)",
       "Bash(do echo \"=== $file ===\")",
       "Bash(done)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(./import-file:*)"
     ],
     "deny": []
   }

@@ -1,0 +1,241 @@
+package database
+
+import (
+	"database/sql"
+	"fmt"
+	"strings"
+
+	"github.com/jmoiron/sqlx"
+)
+
+// BatchOperations provides optimized batch database operations
+type BatchOperations struct {
+	db *Database
+}
+
+// NewBatchOperations creates a new batch operations handler
+func NewBatchOperations(db *Database) *BatchOperations {
+	return &BatchOperations{db: db}
+}
+
+// BatchImportData imports multiple sessions, messages, token usage, and tool results in a single transaction
+func (bo *BatchOperations) BatchImportData(sessions []Session, messages []Message, tokenUsages []TokenUsage, toolResults []ToolResult) error {
+	tx, err := bo.db.Beginx()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Batch insert sessions
+	if len(sessions) > 0 {
+		fmt.Printf("Inserting %d sessions\n", len(sessions))
+		if err := bo.batchUpsertSessions(tx, sessions); err != nil {
+			return fmt.Errorf("failed to batch upsert sessions: %w", err)
+		}
+	}
+
+	// Batch insert messages
+	if len(messages) > 0 {
+		fmt.Printf("Inserting %d messages\n", len(messages))
+		if err := bo.batchUpsertMessages(tx, messages); err != nil {
+			return fmt.Errorf("failed to batch upsert messages: %w", err)
+		}
+	}
+
+	// Batch insert token usage
+	if len(tokenUsages) > 0 {
+		if err := bo.batchUpsertTokenUsages(tx, tokenUsages); err != nil {
+			return fmt.Errorf("failed to batch upsert token usages: %w", err)
+		}
+	}
+
+	// Batch insert tool results
+	if len(toolResults) > 0 {
+		if err := bo.batchUpsertToolResults(tx, toolResults); err != nil {
+			return fmt.Errorf("failed to batch upsert tool results: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	fmt.Println("Transaction committed successfully")
+	return nil
+}
+
+func (bo *BatchOperations) batchUpsertSessions(tx *sqlx.Tx, sessions []Session) error {
+	if len(sessions) == 0 {
+		return nil
+	}
+
+	// Build batch insert with ON CONFLICT UPDATE
+	query := `
+		INSERT OR REPLACE INTO sessions (id, project_name, project_path, file_path, git_branch, 
+			git_worktree, start_time, last_activity, is_active, status, model, 
+			message_count, duration_seconds) 
+		VALUES `
+	
+	var values []string
+	var args []interface{}
+	
+	for _, session := range sessions {
+		placeholders := "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+		values = append(values, placeholders)
+		args = append(args, session.ID, session.ProjectName, session.ProjectPath, 
+			session.FilePath, session.GitBranch, session.GitWorktree, session.StartTime,
+			session.LastActivity, session.IsActive, session.Status, session.Model,
+			session.MessageCount, session.DurationSeconds)
+	}
+	
+	query += strings.Join(values, ", ")
+
+	_, err := tx.Exec(query, args...)
+	return err
+}
+
+func (bo *BatchOperations) batchUpsertMessages(tx *sqlx.Tx, messages []Message) error {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	// SQLite has a limit of 999 parameters, so batch the inserts
+	const batchSize = 100 // 100 messages × 6 params = 600 params (safe under 999 limit)
+	
+	for i := 0; i < len(messages); i += batchSize {
+		end := i + batchSize
+		if end > len(messages) {
+			end = len(messages)
+		}
+		batch := messages[i:end]
+		
+		query := `
+			INSERT OR REPLACE INTO messages (id, session_id, role, content, timestamp, parent_uuid) 
+			VALUES `
+		
+		var values []string
+		var args []interface{}
+		
+		for _, msg := range batch {
+			placeholders := "(?, ?, ?, ?, ?, ?)"
+			values = append(values, placeholders)
+			
+			var parentID interface{} = sql.NullString{}
+			if msg.ParentUUID != nil {
+				parentID = *msg.ParentUUID
+			}
+			
+			args = append(args, msg.ID, msg.SessionID, msg.Role, msg.Content,
+				msg.Timestamp, parentID)
+		}
+		
+		query += strings.Join(values, ", ")
+		
+		if i == 0 {
+			fmt.Printf("Messages batch size: %d, total batches: %d\n", batchSize, (len(messages)+batchSize-1)/batchSize)
+			// Check first few message IDs
+			for j := 0; j < 3 && j < len(batch); j++ {
+				fmt.Printf("Message %d ID: %s\n", j, batch[j].ID)
+			}
+		}
+		
+		result, err := tx.Exec(query, args...)
+		if err != nil {
+			return fmt.Errorf("failed to insert message batch %d: %w", i/batchSize, err)
+		}
+		
+		rowsAffected, _ := result.RowsAffected()
+		fmt.Printf("Batch %d: inserted/updated %d rows\n", i/batchSize, rowsAffected)
+	}
+	
+	return nil
+}
+
+func (bo *BatchOperations) batchUpsertTokenUsages(tx *sqlx.Tx, tokenUsages []TokenUsage) error {
+	if len(tokenUsages) == 0 {
+		return nil
+	}
+
+	// SQLite has a limit of 999 parameters, so batch the inserts
+	const batchSize = 100 // 100 records × 8 params = 800 params (safe under 999 limit)
+	
+	for i := 0; i < len(tokenUsages); i += batchSize {
+		end := i + batchSize
+		if end > len(tokenUsages) {
+			end = len(tokenUsages)
+		}
+		batch := tokenUsages[i:end]
+		
+		query := `
+			INSERT OR REPLACE INTO token_usage (message_id, session_id, input_tokens, output_tokens, 
+				cache_creation_input_tokens, cache_read_input_tokens, total_tokens, estimated_cost) 
+			VALUES `
+		
+		var values []string
+		var args []interface{}
+		
+		for _, tu := range batch {
+			placeholders := "(?, ?, ?, ?, ?, ?, ?, ?)"
+			values = append(values, placeholders)
+			args = append(args, tu.MessageID, tu.SessionID, tu.InputTokens, tu.OutputTokens,
+				tu.CacheCreationInputTokens, tu.CacheReadInputTokens, tu.TotalTokens, tu.EstimatedCost)
+		}
+		
+		query += strings.Join(values, ", ")
+
+		if _, err := tx.Exec(query, args...); err != nil {
+			return fmt.Errorf("failed to insert token usage batch %d: %w", i/batchSize, err)
+		}
+	}
+	
+	return nil
+}
+
+func (bo *BatchOperations) batchUpsertToolResults(tx *sqlx.Tx, toolResults []ToolResult) error {
+	if len(toolResults) == 0 {
+		return nil
+	}
+
+	query := `
+		INSERT OR REPLACE INTO tool_results (message_id, session_id, tool_name, result_data, 
+			file_path, timestamp) 
+		VALUES `
+	
+	var values []string
+	var args []interface{}
+	
+	for _, tr := range toolResults {
+		placeholders := "(?, ?, ?, ?, ?, ?)"
+		values = append(values, placeholders)
+		
+		var filePath interface{} = sql.NullString{}
+		if tr.FilePath != nil {
+			filePath = *tr.FilePath
+		}
+		
+		args = append(args, tr.MessageID, tr.SessionID, tr.ToolName,
+			tr.ResultData, filePath, tr.Timestamp)
+	}
+	
+	query += strings.Join(values, ", ")
+
+	_, err := tx.Exec(query, args...)
+	return err
+}
+
+// ExecuteInReadTransaction executes a function within a transaction optimized for reads
+func (bo *BatchOperations) ExecuteInReadTransaction(fn func(*sqlx.Tx) error) error {
+	tx, err := bo.db.Beginx()
+	if err != nil {
+		return fmt.Errorf("failed to begin read transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Note: We don't use PRAGMA query_only because it affects the entire connection,
+	// not just the transaction, which can cause "readonly database" errors elsewhere
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}

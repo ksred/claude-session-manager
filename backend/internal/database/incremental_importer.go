@@ -297,14 +297,14 @@ func (i *IncrementalImporter) fileNeedsProcessing(filePath string, modTime time.
 
 // processFile imports a single file and updates tracking
 func (i *IncrementalImporter) processFile(fileInfo FileToProcess) (int, int, error) {
-	// Create importer for this file
-	importer := NewImporterWithContext(i.ctx, i.repo, i.logger)
+	// Create batch importer for optimized imports
+	batchImporter := NewBatchImporter(i.repo, i.logger)
 	
 	// Mark file as being processed
 	i.markFileProcessing(fileInfo.FilePath, fileInfo.ModTime, int64(fileInfo.SizeMB*1024*1024))
 	
-	// Import the file
-	sessions, messages, err := importer.ImportJSONLFile(fileInfo.FilePath, fileInfo.ProjectInfo)
+	// Import the file using batch operations
+	sessions, messages, err := batchImporter.ImportJSONLFileOptimized(fileInfo.FilePath, fileInfo.ProjectInfo)
 	if err != nil {
 		i.markFileError(fileInfo.FilePath, err.Error())
 		return 0, 0, err

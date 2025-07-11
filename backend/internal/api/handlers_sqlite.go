@@ -13,23 +13,25 @@ import (
 
 // SQLiteHandlers contains handlers that use the SQLite database
 type SQLiteHandlers struct {
-	repo    *database.SessionRepository
-	adapter *database.APIAdapter
-	logger  *logrus.Logger
+	repo         *database.SessionRepository
+	readOptimized *database.ReadOptimizedRepository
+	adapter      *database.APIAdapter
+	logger       *logrus.Logger
 }
 
 // NewSQLiteHandlers creates new SQLite-based handlers
 func NewSQLiteHandlers(repo *database.SessionRepository, logger *logrus.Logger) *SQLiteHandlers {
 	return &SQLiteHandlers{
-		repo:    repo,
-		adapter: database.NewAPIAdapter(repo),
-		logger:  logger,
+		repo:         repo,
+		readOptimized: database.NewReadOptimizedRepository(repo.GetDB()),
+		adapter:      database.NewAPIAdapter(repo),
+		logger:       logger,
 	}
 }
 
 // GetSessionsHandler returns all sessions
 func (h *SQLiteHandlers) GetSessionsHandler(c *gin.Context) {
-	sessions, err := h.repo.GetAllSessions()
+	sessions, err := h.readOptimized.GetAllSessionsOptimized()
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get sessions from database")
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -87,7 +89,7 @@ func (h *SQLiteHandlers) GetSessionHandler(c *gin.Context) {
 
 // GetActiveSessionsHandler returns currently active sessions
 func (h *SQLiteHandlers) GetActiveSessionsHandler(c *gin.Context) {
-	sessions, err := h.repo.GetActiveSessions()
+	sessions, err := h.readOptimized.GetActiveSessionsOptimized()
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get active sessions from database")
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -610,7 +612,7 @@ func (h *SQLiteHandlers) GetTokenTimelineHandler(c *gin.Context) {
 		granularity = "hour"
 	}
 
-	timeline, err := h.repo.GetTokenTimeline(hours, granularity)
+	timeline, err := h.readOptimized.GetTokenTimelineOptimized(hours, granularity)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get token timeline")
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -634,7 +636,7 @@ func (h *SQLiteHandlers) GetTokenTimelineHandler(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path string true "Session ID"
-// @Param hours query int false "Number of hours to look back (default: 24, max: 8760)"
+// @Param hours query int false "Number of hours to look back (default: 168)"
 // @Param granularity query string false "Time granularity: minute, hour, day (default: minute)"
 // @Success 200 {object} TokenTimelineResponse "Successfully retrieved session token timeline"
 // @Failure 400 {object} ErrorResponse "Invalid parameters"
@@ -650,22 +652,27 @@ func (h *SQLiteHandlers) GetSessionTokenTimelineHandler(c *gin.Context) {
 		return
 	}
 
+	// Parse hours parameter with default of 168 (1 week)
+	hours := 168
+	if hoursStr := c.Query("hours"); hoursStr != "" {
+		if parsedHours, err := strconv.Atoi(hoursStr); err == nil && parsedHours > 0 {
+			hours = parsedHours
+		}
+	}
+
 	granularity := c.DefaultQuery("granularity", "minute")
 	if granularity != "minute" && granularity != "hour" && granularity != "day" {
 		granularity = "minute"
 	}
 
-	// Parse hours parameter, default to 24 hours
-	hoursStr := c.DefaultQuery("hours", "24")
-	hours, err := strconv.Atoi(hoursStr)
-	if err != nil || hours <= 0 {
-		hours = 24
-	}
-	if hours > 8760 { // Max 1 year
-		hours = 8760
-	}
+	// Log the request parameters
+	h.logger.WithFields(logrus.Fields{
+		"session_id":  sessionID,
+		"hours":       hours,
+		"granularity": granularity,
+	}).Debug("Getting session token timeline")
 
-	timeline, err := h.repo.GetSessionTokenTimeline(sessionID, hours, granularity)
+	timeline, err := h.readOptimized.GetSessionTokenTimelineOptimized(sessionID, hours, granularity)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get session token timeline")
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -674,10 +681,18 @@ func (h *SQLiteHandlers) GetSessionTokenTimelineHandler(c *gin.Context) {
 		return
 	}
 
+	// Log the result count
+	h.logger.WithFields(logrus.Fields{
+		"session_id":    sessionID,
+		"timeline_count": len(timeline),
+		"hours":         hours,
+		"granularity":   granularity,
+	}).Debug("Retrieved session token timeline")
+
 	// If no timeline data, check if session exists
 	if len(timeline) == 0 {
 		// Verify if the session actually exists
-		_, err := h.repo.GetSessionByID(sessionID)
+		_, err := h.readOptimized.GetSessionByIDOptimized(sessionID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": "Session not found",
