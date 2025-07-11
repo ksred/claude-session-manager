@@ -25,7 +25,7 @@ type BatchImporter struct {
 func NewBatchImporter(repo *SessionRepository, logger *logrus.Logger) *BatchImporter {
 	return &BatchImporter{
 		repo:   repo,
-		batch:  NewBatchOperations(repo.db),
+		batch:  NewBatchOperations(repo.db, logger),
 		logger: logger,
 		ctx:    context.Background(),
 	}

@@ -6,16 +6,21 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/sirupsen/logrus"
 )
 
 // BatchOperations provides optimized batch database operations
 type BatchOperations struct {
-	db *Database
+	db     *Database
+	logger *logrus.Logger
 }
 
 // NewBatchOperations creates a new batch operations handler
-func NewBatchOperations(db *Database) *BatchOperations {
-	return &BatchOperations{db: db}
+func NewBatchOperations(db *Database, logger *logrus.Logger) *BatchOperations {
+	return &BatchOperations{
+		db:     db,
+		logger: logger,
+	}
 }
 
 // BatchImportData imports multiple sessions, messages, token usage, and tool results in a single transaction
@@ -28,7 +33,7 @@ func (bo *BatchOperations) BatchImportData(sessions []Session, messages []Messag
 
 	// Batch insert sessions
 	if len(sessions) > 0 {
-		fmt.Printf("Inserting %d sessions\n", len(sessions))
+		bo.logger.WithField("count", len(sessions)).Debug("Inserting sessions")
 		if err := bo.batchUpsertSessions(tx, sessions); err != nil {
 			return fmt.Errorf("failed to batch upsert sessions: %w", err)
 		}
@@ -36,7 +41,7 @@ func (bo *BatchOperations) BatchImportData(sessions []Session, messages []Messag
 
 	// Batch insert messages
 	if len(messages) > 0 {
-		fmt.Printf("Inserting %d messages\n", len(messages))
+		bo.logger.WithField("count", len(messages)).Debug("Inserting messages")
 		if err := bo.batchUpsertMessages(tx, messages); err != nil {
 			return fmt.Errorf("failed to batch upsert messages: %w", err)
 		}
@@ -59,7 +64,7 @@ func (bo *BatchOperations) BatchImportData(sessions []Session, messages []Messag
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	fmt.Println("Transaction committed successfully")
+	bo.logger.Debug("Batch transaction committed successfully")
 	return nil
 }
 
@@ -131,11 +136,11 @@ func (bo *BatchOperations) batchUpsertMessages(tx *sqlx.Tx, messages []Message) 
 		query += strings.Join(values, ", ")
 		
 		if i == 0 {
-			fmt.Printf("Messages batch size: %d, total batches: %d\n", batchSize, (len(messages)+batchSize-1)/batchSize)
-			// Check first few message IDs
-			for j := 0; j < 3 && j < len(batch); j++ {
-				fmt.Printf("Message %d ID: %s\n", j, batch[j].ID)
-			}
+			bo.logger.WithFields(logrus.Fields{
+				"batch_size":    batchSize,
+				"total_batches": (len(messages)+batchSize-1)/batchSize,
+				"total_messages": len(messages),
+			}).Debug("Starting message batch processing")
 		}
 		
 		result, err := tx.Exec(query, args...)
@@ -144,7 +149,10 @@ func (bo *BatchOperations) batchUpsertMessages(tx *sqlx.Tx, messages []Message) 
 		}
 		
 		rowsAffected, _ := result.RowsAffected()
-		fmt.Printf("Batch %d: inserted/updated %d rows\n", i/batchSize, rowsAffected)
+		bo.logger.WithFields(logrus.Fields{
+			"batch_num": i/batchSize,
+			"rows_affected": rowsAffected,
+		}).Debug("Message batch processed")
 	}
 	
 	return nil
