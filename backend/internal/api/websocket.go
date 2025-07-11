@@ -39,6 +39,7 @@ type WebSocketHub struct {
 	unregister  chan *WebSocketClient
 	logger      *logrus.Logger
 	ChatHandler ChatMessageHandler
+	batcher     *EventBatcher
 }
 
 // ChatMessageHandler interface for handling chat messages
@@ -55,6 +56,11 @@ func NewWebSocketHub(logger *logrus.Logger) *WebSocketHub {
 		unregister: make(chan *WebSocketClient),
 		logger:     logger,
 	}
+}
+
+// SetBatcher sets the event batcher for the hub
+func (h *WebSocketHub) SetBatcher(batcher *EventBatcher) {
+	h.batcher = batcher
 }
 
 // Run starts the WebSocket hub
@@ -90,7 +96,7 @@ func (h *WebSocketHub) Run(ctx context.Context) {
 				"message_size": len(message),
 				"clients":      len(h.clients),
 			}).Debug("Hub received message to broadcast")
-			
+
 			sentCount := 0
 			failedCount := 0
 			for client := range h.clients {
@@ -109,10 +115,10 @@ func (h *WebSocketHub) Run(ctx context.Context) {
 					delete(h.clients, client)
 				}
 			}
-			
+
 			h.logger.WithFields(logrus.Fields{
-				"sent_count":   sentCount,
-				"failed_count": failedCount,
+				"sent_count":    sentCount,
+				"failed_count":  failedCount,
 				"total_clients": len(h.clients),
 			}).Debug("Finished broadcasting message")
 		}
@@ -126,6 +132,19 @@ func (h *WebSocketHub) Run(ctx context.Context) {
 // - "session_update": An existing session was modified
 // - "session_deleted": A session was deleted
 func (h *WebSocketHub) BroadcastUpdate(updateType string, data interface{}) {
+	// Check if we should batch this event
+	shouldBatch := h.shouldBatchEvent(updateType)
+
+	if shouldBatch && h.batcher != nil {
+		// Queue the event for batching
+		h.logger.WithFields(logrus.Fields{
+			"update_type": updateType,
+		}).Debug("Queueing event for batch")
+		h.batcher.QueueEvent(updateType, data)
+		return
+	}
+
+	// Send immediately (no batching)
 	message := gin.H{
 		"type":      updateType,
 		"data":      data,
@@ -134,9 +153,10 @@ func (h *WebSocketHub) BroadcastUpdate(updateType string, data interface{}) {
 
 	// Log the update being broadcast
 	h.logger.WithFields(logrus.Fields{
-		"update_type":   updateType,
-		"client_count":  len(h.clients),
-		"timestamp":     message["timestamp"],
+		"update_type":  updateType,
+		"client_count": len(h.clients),
+		"timestamp":    message["timestamp"],
+		"batched":      false,
 	}).Debug("Broadcasting WebSocket update to frontend")
 
 	// Convert to JSON
@@ -148,12 +168,30 @@ func (h *WebSocketHub) BroadcastUpdate(updateType string, data interface{}) {
 
 	// Log the message size
 	h.logger.WithFields(logrus.Fields{
-		"update_type":   updateType,
-		"message_size":  len(jsonData),
-		"client_count":  len(h.clients),
+		"update_type":  updateType,
+		"message_size": len(jsonData),
+		"client_count": len(h.clients),
 	}).Debug("Sending WebSocket message to broadcast channel")
 
 	h.broadcast <- jsonData
+}
+
+// shouldBatchEvent determines if an event type should be batched
+func (h *WebSocketHub) shouldBatchEvent(eventType string) bool {
+	// Batch these high-frequency events
+	switch eventType {
+	case "session_update", "activity_update", "metrics_update":
+		return true
+	// Don't batch these important events
+	case "session_new", "session_deleted", "sessions_updated":
+		return false
+	// Chat events should not be batched for real-time experience
+	case "chat:message:recv", "chat:message:send", "chat:error":
+		return false
+	default:
+		// Default to batching unknown events
+		return true
+	}
 }
 
 // websocketHandler handles WebSocket connections
@@ -214,7 +252,7 @@ func (c *WebSocketClient) readPump() {
 
 		// Handle incoming message
 		c.Logger.WithField("message", string(message)).Debug("Received WebSocket message")
-		
+
 		// Process incoming messages
 		var msg map[string]interface{}
 		if err := json.Unmarshal(message, &msg); err != nil {
@@ -310,7 +348,7 @@ func (c *WebSocketClient) writePump() {
 				c.Logger.WithError(err).WithField("client_id", c.ID).Debug("Failed to close writer")
 				return
 			}
-			
+
 			c.Logger.WithField("client_id", c.ID).Debug("Successfully sent message to client")
 
 		case <-ticker.C:

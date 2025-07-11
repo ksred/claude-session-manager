@@ -31,8 +31,74 @@ func NewBatchImporter(repo *SessionRepository, logger *logrus.Logger) *BatchImpo
 	}
 }
 
+// ImportJSONLFileIncremental imports only new messages from a JSONL file
+func (bi *BatchImporter) ImportJSONLFileIncremental(filePath string, projectInfo ProjectInfo) (int, int, error) {
+	// First, get existing message IDs for this session to avoid duplicates
+	sessionID, err := bi.getSessionIDFromFile(filePath)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to determine session ID: %w", err)
+	}
+	
+	existingMessageIDs, err := bi.getExistingMessageIDs(sessionID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get existing message IDs: %w", err)
+	}
+	
+	return bi.importJSONLFileOptimized(filePath, projectInfo, existingMessageIDs, true)
+}
+
 // ImportJSONLFileOptimized imports a JSONL file using batch operations
 func (bi *BatchImporter) ImportJSONLFileOptimized(filePath string, projectInfo ProjectInfo) (int, int, error) {
+	return bi.importJSONLFileOptimized(filePath, projectInfo, make(map[string]bool), false)
+}
+
+// getSessionIDFromFile extracts session ID from file path or file content
+func (bi *BatchImporter) getSessionIDFromFile(filePath string) (string, error) {
+	baseName := filepath.Base(filePath)
+	if sessionID := strings.TrimSuffix(baseName, ".jsonl"); sessionID != baseName {
+		return sessionID, nil
+	}
+	
+	// If filename doesn't contain session ID, peek at first line
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	
+	scanner := bufio.NewScanner(file)
+	if scanner.Scan() {
+		var msg JSONLMessage
+		if err := json.Unmarshal(scanner.Bytes(), &msg); err == nil && msg.SessionID != "" {
+			return msg.SessionID, nil
+		}
+	}
+	
+	return "", fmt.Errorf("could not determine session ID from file")
+}
+
+// getExistingMessageIDs gets all message IDs that already exist in the database for a session
+func (bi *BatchImporter) getExistingMessageIDs(sessionID string) (map[string]bool, error) {
+	rows, err := bi.repo.db.Query("SELECT id FROM messages WHERE session_id = ?", sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	existing := make(map[string]bool)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		existing[id] = true
+	}
+	
+	return existing, nil
+}
+
+// importJSONLFileOptimized is the core import logic that can be used for both full and incremental imports
+func (bi *BatchImporter) importJSONLFileOptimized(filePath string, projectInfo ProjectInfo, existingMessageIDs map[string]bool, isIncremental bool) (int, int, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to open file: %w", err)
@@ -105,6 +171,11 @@ func (bi *BatchImporter) ImportJSONLFileOptimized(filePath string, projectInfo P
 			}
 		}
 
+		// Skip existing messages in incremental mode
+		if isIncremental && existingMessageIDs[msg.UUID] {
+			continue
+		}
+
 		// Create message
 		contentBytes, _ := json.Marshal(msg.Message.Content)
 		dbMessage := Message{
@@ -119,7 +190,7 @@ func (bi *BatchImporter) ImportJSONLFileOptimized(filePath string, projectInfo P
 		}
 		messages = append(messages, dbMessage)
 
-		// Handle token usage
+		// Handle token usage (only if not skipping this message)
 		if msg.Message.Usage != nil {
 			usage := TokenUsage{
 				MessageID:                msg.UUID,
@@ -147,7 +218,7 @@ func (bi *BatchImporter) ImportJSONLFileOptimized(filePath string, projectInfo P
 			tokenUsages = append(tokenUsages, usage)
 		}
 
-		// Extract tool results
+		// Extract tool results (only if not skipping this message)
 		if msg.Message.Role == "assistant" && msg.Message.Content != nil {
 			contentStr := ""
 			switch v := msg.Message.Content.(type) {
@@ -210,8 +281,16 @@ func (bi *BatchImporter) ImportJSONLFileOptimized(filePath string, projectInfo P
 	}
 
 	// Perform batch import in a single transaction
-	if err := bi.batch.BatchImportData(sessions, messages, tokenUsages, toolResults); err != nil {
-		return 0, 0, fmt.Errorf("batch import failed: %w", err)
+	if isIncremental {
+		// For incremental imports, use INSERT OR IGNORE to avoid overwriting existing data
+		if err := bi.batch.BatchImportDataIncremental(sessions, messages, tokenUsages, toolResults); err != nil {
+			return 0, 0, fmt.Errorf("incremental batch import failed: %w", err)
+		}
+	} else {
+		// For full imports, use INSERT OR REPLACE to overwrite existing data
+		if err := bi.batch.BatchImportData(sessions, messages, tokenUsages, toolResults); err != nil {
+			return 0, 0, fmt.Errorf("batch import failed: %w", err)
+		}
 	}
 
 	return len(sessions), len(messages), nil

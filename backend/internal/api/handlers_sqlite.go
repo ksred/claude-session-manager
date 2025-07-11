@@ -13,19 +13,19 @@ import (
 
 // SQLiteHandlers contains handlers that use the SQLite database
 type SQLiteHandlers struct {
-	repo         *database.SessionRepository
+	repo          *database.SessionRepository
 	readOptimized *database.ReadOptimizedRepository
-	adapter      *database.APIAdapter
-	logger       *logrus.Logger
+	adapter       *database.APIAdapter
+	logger        *logrus.Logger
 }
 
 // NewSQLiteHandlers creates new SQLite-based handlers
 func NewSQLiteHandlers(repo *database.SessionRepository, logger *logrus.Logger) *SQLiteHandlers {
 	return &SQLiteHandlers{
-		repo:         repo,
+		repo:          repo,
 		readOptimized: database.NewReadOptimizedRepository(repo.GetDB()),
-		adapter:      database.NewAPIAdapter(repo),
-		logger:       logger,
+		adapter:       database.NewAPIAdapter(repo),
+		logger:        logger,
 	}
 }
 
@@ -288,7 +288,7 @@ func (h *SQLiteHandlers) GetActivityHandler(c *gin.Context) {
 // GetSessionActivityHandler returns activity for a specific session
 func (h *SQLiteHandlers) GetSessionActivityHandler(c *gin.Context) {
 	sessionID := c.Param("id")
-	
+
 	limitStr := c.DefaultQuery("limit", "50")
 	limit := 50
 	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
@@ -319,7 +319,7 @@ func (h *SQLiteHandlers) GetSessionActivityHandler(c *gin.Context) {
 // GetProjectActivityHandler returns activity for a specific project
 func (h *SQLiteHandlers) GetProjectActivityHandler(c *gin.Context) {
 	projectName := c.Param("projectName")
-	
+
 	limitStr := c.DefaultQuery("limit", "50")
 	limit := 50
 	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
@@ -498,11 +498,11 @@ func (h *SQLiteHandlers) GetRecentFilesHandler(c *gin.Context) {
 			"tool_name":     file.ToolName,
 			"occurrences":   file.Occurrences,
 		}
-		
+
 		if file.GitBranch != nil {
 			apiFile["git_branch"] = *file.GitBranch
 		}
-		
+
 		apiFiles = append(apiFiles, apiFile)
 	}
 
@@ -575,7 +575,7 @@ func (h *SQLiteHandlers) GetProjectRecentFilesHandler(c *gin.Context) {
 			"tools_used":          toolsList,
 			"total_modifications": file.TotalModifications,
 		}
-		
+
 		apiFiles = append(apiFiles, apiFile)
 	}
 
@@ -683,10 +683,10 @@ func (h *SQLiteHandlers) GetSessionTokenTimelineHandler(c *gin.Context) {
 
 	// Log the result count
 	h.logger.WithFields(logrus.Fields{
-		"session_id":    sessionID,
+		"session_id":     sessionID,
 		"timeline_count": len(timeline),
-		"hours":         hours,
-		"granularity":   granularity,
+		"hours":          hours,
+		"granularity":    granularity,
 	}).Debug("Retrieved session token timeline")
 
 	// If no timeline data, check if session exists
@@ -699,7 +699,7 @@ func (h *SQLiteHandlers) GetSessionTokenTimelineHandler(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		// Session exists but has no token usage data yet - return empty timeline
 		c.JSON(http.StatusOK, gin.H{
 			"session_id":  sessionID,

@@ -12,7 +12,8 @@
       "Bash(cat:*)",
       "Bash(./test_claude_output.sh:*)",
       "Bash(./test_claude_interactive.sh:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(./cmd/import-file/import-file:*)"
     ],
     "deny": []
   }

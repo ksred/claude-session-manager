@@ -708,6 +708,12 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "type": "integer",
+                        "description": "Number of hours to look back (default: 168)",
+                        "name": "hours",
+                        "in": "query"
+                    },
+                    {
                         "type": "string",
                         "description": "Time granularity: minute, hour, day (default: minute)",
                         "name": "granularity",

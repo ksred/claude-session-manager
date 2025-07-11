@@ -84,13 +84,13 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 	if cfg.Features.EnableWebSocket && wsHub != nil {
 		// Create chat repository (Database embeds *sqlx.DB, so we pass db directly)
 		chatRepo := chat.NewRepository(db.DB)
-		
+
 		// Create CLI manager
 		cliManager := chat.NewCLIManager(chatRepo)
-		
+
 		// Create chat handler
 		chatHandler = chat.NewWebSocketChatHandler(cliManager, chatRepo, logger)
-		
+
 		// Set the chat handler on the WebSocket hub
 		wsHub.ChatHandler = chatHandler
 	}
@@ -110,6 +110,25 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 
 	// Start WebSocket hub if enabled
 	if server.wsHub != nil {
+		// Create and set up the event batcher
+		batchInterval := time.Duration(cfg.Features.WebSocketBatchInterval) * time.Second
+		if batchInterval < 10*time.Second {
+			batchInterval = 10 * time.Second // Minimum 10 seconds
+		}
+		if batchInterval > 30*time.Second {
+			batchInterval = 30 * time.Second // Maximum 30 seconds
+		}
+		batcher := NewEventBatcher(server.wsHub, logger, batchInterval)
+		server.wsHub.SetBatcher(batcher)
+
+		// Start the batcher
+		go func() {
+			logger.Info("Event batcher goroutine started")
+			batcher.Start(ctx)
+			logger.Info("Event batcher goroutine exited")
+		}()
+
+		// Start the WebSocket hub
 		go func() {
 			logger.Info("WebSocket hub goroutine started")
 			server.wsHub.Run(ctx)
@@ -266,7 +285,7 @@ func (s *SQLiteServer) setupRoutes() {
 
 	// Static files (if needed)
 	s.router.Static("/static", "./static")
-	
+
 	// Swagger documentation
 	// Note: You'll need to update the swagger imports if using this
 	// s.router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -334,7 +353,7 @@ func (s *SQLiteServer) websocketHandler(c *gin.Context) {
 // importExistingData imports existing JSONL files into the database using incremental import
 func (s *SQLiteServer) importExistingData() error {
 	s.logger.Info("Starting initial data import from JSONL files (press Ctrl+C to cancel)")
-	
+
 	// Use incremental importer to avoid re-processing files
 	incrementalImporter := database.NewIncrementalImporter(s.ctx, s.sessionRepo, s.db, s.logger)
 	if err := incrementalImporter.ImportClaudeDirectory(s.config.Claude.HomeDirectory, false); err != nil {
