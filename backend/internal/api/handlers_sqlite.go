@@ -264,7 +264,7 @@ func (h *SQLiteHandlers) GetActivityHandler(c *gin.Context) {
 		limit = 500
 	}
 
-	activities, err := h.repo.GetRecentActivity(limit)
+	activities, err := h.readOptimized.GetRecentActivityOptimized(limit)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get recent activity from database")
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -295,7 +295,7 @@ func (h *SQLiteHandlers) GetSessionActivityHandler(c *gin.Context) {
 		limit = l
 	}
 
-	activities, err := h.repo.GetSessionActivity(sessionID, limit)
+	activities, err := h.readOptimized.GetSessionActivityOptimized(sessionID, limit)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get session activity")
 		c.JSON(http.StatusInternalServerError, gin.H{
