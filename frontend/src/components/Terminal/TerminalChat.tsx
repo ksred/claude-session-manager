@@ -94,19 +94,21 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
   useEffect(() => {
     const handleWebSocketMessage = (event: MessageEvent) => {
       try {
-        const data = JSON.parse(event.data);
+        // The WebSocket hook forwards the raw event.data, so we need to parse it
+        const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        console.log('TerminalChat received message:', message.type, message.data?.session_id);
         
-        switch (data.type) {
+        switch (message.type) {
           case 'chat:session:start':
-            if (data.data?.session_id === sessionId) {
+            if (message.data?.session_id === sessionId) {
               setState(prev => ({
                 ...prev,
                 status: 'active',
-                chatSessionId: data.data.metadata?.chat_session_id,
+                chatSessionId: message.data.metadata?.chat_session_id,
                 messages: [
                   ...prev.messages,
                   {
-                    id: `system-${Date.now()}`,
+                    id: `system-start-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                     type: 'system',
                     content: 'Chat session started. You can now talk to Claude.',
                     timestamp: new Date(),
@@ -117,7 +119,7 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
             break;
 
           case 'chat:session:end':
-            if (data.data?.session_id === sessionId) {
+            if (message.data?.session_id === sessionId) {
               setState(prev => ({
                 ...prev,
                 status: 'idle',
@@ -125,7 +127,7 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
                 messages: [
                   ...prev.messages,
                   {
-                    id: `system-${Date.now()}`,
+                    id: `system-end-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                     type: 'system',
                     content: 'Chat session ended.',
                     timestamp: new Date(),
@@ -136,17 +138,17 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
             break;
 
           case 'chat:message:send':
-            if (data.data?.session_id === sessionId && data.data?.metadata?.echo) {
+            if (message.data?.session_id === sessionId && message.data?.metadata?.echo) {
               setState(prev => ({
                 ...prev,
                 messages: [
                   ...prev.messages,
                   {
-                    id: data.data.metadata.message_id || `user-${Date.now()}`,
+                    id: message.data.metadata.message_id || `user-${Date.now()}`,
                     type: 'user',
-                    content: data.data.content,
-                    timestamp: new Date(data.data.timestamp),
-                    metadata: data.data.metadata,
+                    content: message.data.content,
+                    timestamp: new Date(message.data.timestamp),
+                    metadata: message.data.metadata,
                   },
                 ],
               }));
@@ -154,18 +156,18 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
             break;
 
           case 'chat:message:receive':
-            if (data.data?.session_id === sessionId) {
+            if (message.data?.session_id === sessionId) {
               setState(prev => ({
                 ...prev,
                 isTyping: false,
                 messages: [
                   ...prev.messages,
                   {
-                    id: data.data.metadata?.message_id || `claude-${Date.now()}`,
+                    id: message.data.metadata?.message_id || `claude-${Date.now()}`,
                     type: 'claude',
-                    content: data.data.content,
-                    timestamp: new Date(data.data.timestamp),
-                    metadata: data.data.metadata,
+                    content: message.data.content,
+                    timestamp: new Date(message.data.timestamp),
+                    metadata: message.data.metadata,
                   },
                 ],
               }));
@@ -173,29 +175,29 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
             break;
 
           case 'chat:typing:start':
-            if (data.data?.session_id === sessionId) {
+            if (message.data?.session_id === sessionId) {
               setState(prev => ({ ...prev, isTyping: true }));
             }
             break;
 
           case 'chat:typing:stop':
-            if (data.data?.session_id === sessionId) {
+            if (message.data?.session_id === sessionId) {
               setState(prev => ({ ...prev, isTyping: false }));
             }
             break;
 
           case 'chat:error':
-            if (data.data?.session_id === sessionId) {
+            if (message.data?.session_id === sessionId) {
               setState(prev => ({
                 ...prev,
                 status: 'error',
-                error: data.data.content,
+                error: message.data.content,
                 messages: [
                   ...prev.messages,
                   {
-                    id: `error-${Date.now()}`,
+                    id: `error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                     type: 'system',
-                    content: `Error: ${data.data.content}`,
+                    content: `Error: ${message.data.content}`,
                     timestamp: new Date(),
                   },
                 ],

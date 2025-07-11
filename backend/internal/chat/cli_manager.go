@@ -2,12 +2,28 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 )
+
+// ClaudeResponse represents the JSON response from Claude CLI
+type ClaudeResponse struct {
+	Type        string  `json:"type"`
+	Subtype     string  `json:"subtype"`
+	IsError     bool    `json:"is_error"`
+	Result      string  `json:"result"`
+	SessionID   string  `json:"session_id"`
+	Error       string  `json:"error,omitempty"`
+	DurationMs  int     `json:"duration_ms,omitempty"`
+	NumTurns    int     `json:"num_turns,omitempty"`
+	TotalCostUSD float64 `json:"total_cost_usd,omitempty"`
+}
 
 // CLIManager manages Claude CLI processes for chat sessions
 type CLIManager struct {
@@ -44,6 +60,9 @@ type CLIProcess struct {
 	
 	// Track if this is the first message
 	isFirstMessage bool
+	
+	// Store the Claude session ID for conversation continuity
+	claudeSessionID string
 }
 
 // NewCLIManager creates a new CLI manager
@@ -62,9 +81,12 @@ func (m *CLIManager) StartChatSession(sessionID string) (*ChatSession, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	fmt.Printf("[CLI_MANAGER] StartChatSession called for session: %s\n", sessionID)
+
 	// Check if we already have an active process for this session
 	if existingProcess, exists := m.processes[sessionID]; exists {
 		if existingProcess.Status == StatusActive {
+			fmt.Printf("[CLI_MANAGER] Found existing active process for session: %s\n", sessionID)
 			// Update last used time
 			existingProcess.mutex.Lock()
 			existingProcess.LastUsed = time.Now()
@@ -77,33 +99,42 @@ func (m *CLIManager) StartChatSession(sessionID string) (*ChatSession, error) {
 
 	// Check process limits
 	if len(m.processes) >= m.maxProcesses {
+		fmt.Printf("[CLI_MANAGER] Process limit reached: %d/%d\n", len(m.processes), m.maxProcesses)
 		return nil, fmt.Errorf("maximum number of processes reached: %d", m.maxProcesses)
 	}
 
+	fmt.Printf("[CLI_MANAGER] Creating new CLI process for session: %s\n", sessionID)
 	// Create new CLI process
 	process, err := m.createCLIProcess(sessionID)
 	if err != nil {
+		fmt.Printf("[CLI_MANAGER] Failed to create CLI process: %v\n", err)
 		return nil, fmt.Errorf("failed to create CLI process: %w", err)
 	}
 
 	// Start the process
+	fmt.Printf("[CLI_MANAGER] Starting process for session: %s\n", sessionID)
 	err = m.startProcess(process)
 	if err != nil {
+		fmt.Printf("[CLI_MANAGER] Failed to start CLI process: %v\n", err)
 		return nil, fmt.Errorf("failed to start CLI process: %w", err)
 	}
 
 	// Store the process
 	m.processes[sessionID] = process
+	fmt.Printf("[CLI_MANAGER] Process stored, now have %d processes\n", len(m.processes))
 
 	// Create chat session in database with PID 0 (since we don't have a real process)
+	fmt.Printf("[CLI_MANAGER] Creating chat session in database for session: %s\n", sessionID)
 	chatSession, err := m.repository.CreateChatSession(sessionID, 0)
 	if err != nil {
+		fmt.Printf("[CLI_MANAGER] Failed to create chat session in DB: %v\n", err)
 		// Cleanup process if database creation fails
 		m.stopProcess(process)
 		delete(m.processes, sessionID)
 		return nil, fmt.Errorf("failed to create chat session: %w", err)
 	}
 
+	fmt.Printf("[CLI_MANAGER] Chat session created successfully with ID: %s\n", chatSession.ID)
 	return chatSession, nil
 }
 
@@ -168,7 +199,7 @@ func (m *CLIManager) GetActiveSessions() ([]*ChatSession, error) {
 
 // createCLIProcess creates a new CLI process instance
 func (m *CLIManager) createCLIProcess(sessionID string) (*CLIProcess, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), m.processTimeout)
+	ctx, cancel := context.WithCancel(context.Background())
 
 	process := &CLIProcess{
 		ID:             fmt.Sprintf("cli-%s-%d", sessionID, time.Now().Unix()),
@@ -207,38 +238,107 @@ func (m *CLIManager) handleMessages(process *CLIProcess) {
 		case message := <-process.InputChan:
 			fmt.Printf("[CLI_MESSAGE] Session %s: Processing message: %s\n", process.SessionID, message)
 			
-			// Build command
-			var cmd *exec.Cmd
-			if process.isFirstMessage {
-				// First message - start new conversation
-				cmd = exec.Command("claude", "--print", message)
-				process.isFirstMessage = false
-			} else {
-				// Continue existing conversation
-				cmd = exec.Command("claude", "--print", "-c", message)
-			}
-			
-			// Execute command and get response
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				fmt.Printf("[CLI_ERROR] Session %s: Command failed: %v\n", process.SessionID, err)
-				select {
-				case process.ErrorChan <- fmt.Errorf("claude command failed: %w", err):
-				default:
+			// Process the message in an anonymous function to ensure proper context cleanup
+			func() {
+				// Build command
+				var cmd *exec.Cmd
+				claudePath := "claude" // Try to find claude in PATH first
+				
+				// Check if claude is in the expected location
+				if _, err := exec.LookPath("claude"); err != nil {
+					// Try common installation paths
+					homeDir, _ := os.UserHomeDir()
+					possiblePaths := []string{
+						filepath.Join(homeDir, ".npm-global", "bin", "claude"),
+						filepath.Join(homeDir, ".local", "bin", "claude"),
+						"/usr/local/bin/claude",
+						"/opt/homebrew/bin/claude",
+					}
+					
+					for _, path := range possiblePaths {
+						if _, err := os.Stat(path); err == nil {
+							claudePath = path
+							break
+						}
+					}
 				}
-				continue
-			}
-			
-			// Send response
-			response := strings.TrimSpace(string(output))
-			fmt.Printf("[CLI_RESPONSE] Session %s: Got response (%d bytes)\n", process.SessionID, len(response))
-			
-			select {
-			case process.OutputChan <- response:
-				fmt.Printf("[CLI_SUCCESS] Session %s: Response sent to channel\n", process.SessionID)
-			default:
-				fmt.Printf("[CLI_DROPPED] Session %s: Output channel full\n", process.SessionID)
-			}
+				
+				fmt.Printf("[CLI_COMMAND] Using claude at: %s\n", claudePath)
+				
+				// Create a timeout context for this specific command (increased timeout for long Claude responses)
+				cmdCtx, cmdCancel := context.WithTimeout(process.ctx, 5*time.Minute)
+				defer cmdCancel() // This will be called when the anonymous function returns
+				
+				if process.isFirstMessage {
+					// First message - start new conversation with JSON output to get session ID
+					cmd = exec.CommandContext(cmdCtx, claudePath, "--print", "--output-format", "json", message)
+					fmt.Printf("[CLI_COMMAND] Session %s: Running first message command: %s --print --output-format json \"%s\"\n", process.SessionID, claudePath, message)
+					process.isFirstMessage = false
+				} else {
+					// Continue existing conversation using session ID with JSON output
+					if process.claudeSessionID == "" {
+						fmt.Printf("[CLI_ERROR] Session %s: No Claude session ID available for continuation\n", process.SessionID)
+						select {
+						case process.ErrorChan <- fmt.Errorf("no Claude session ID available"):
+						default:
+						}
+						return
+					}
+					cmd = exec.CommandContext(cmdCtx, claudePath, "--print", "--output-format", "json", "--resume", process.claudeSessionID, message)
+					fmt.Printf("[CLI_COMMAND] Session %s: Running continuation command: %s --print --output-format json --resume %s \"%s\"\n", process.SessionID, claudePath, process.claudeSessionID, message)
+				}
+				
+				fmt.Printf("[CLI_EXECUTE] Session %s: About to execute command\n", process.SessionID)
+				
+				// Check if context is already cancelled
+				select {
+				case <-cmdCtx.Done():
+					fmt.Printf("[CLI_ERROR] Session %s: Context already cancelled before execution: %v\n", process.SessionID, cmdCtx.Err())
+					return
+				default:
+					// Context is still active, proceed
+				}
+				
+				// Execute command and get response
+				fmt.Printf("[CLI_EXECUTE] Session %s: Starting cmd.CombinedOutput()\n", process.SessionID)
+				output, err := cmd.CombinedOutput()
+				fmt.Printf("[CLI_EXECUTE] Session %s: Command execution completed, output length: %d, error: %v\n", process.SessionID, len(output), err)
+				if err != nil {
+					fmt.Printf("[CLI_ERROR] Session %s: Command failed: %v\n", process.SessionID, err)
+					select {
+					case process.ErrorChan <- fmt.Errorf("claude command failed: %w", err):
+					default:
+					}
+					return
+				}
+				
+				// Parse JSON response (we always use JSON format now)
+				response := strings.TrimSpace(string(output))
+				fmt.Printf("[CLI_RESPONSE] Session %s: Got response (%d bytes)\n", process.SessionID, len(response))
+				
+				var finalResponse string
+				var claudeResp ClaudeResponse
+				if err := json.Unmarshal([]byte(response), &claudeResp); err != nil {
+					fmt.Printf("[CLI_ERROR] Session %s: Failed to parse JSON response: %v\n", process.SessionID, err)
+					finalResponse = response // Fall back to raw response
+				} else {
+					// Always extract and store the Claude session ID (it might change)
+					if claudeResp.SessionID != "" {
+						process.claudeSessionID = claudeResp.SessionID
+						fmt.Printf("[CLI_SESSION] Session %s: Updated Claude session ID: %s\n", process.SessionID, process.claudeSessionID)
+					}
+					
+					// Use the actual response text
+					finalResponse = claudeResp.Result
+				}
+				
+				select {
+				case process.OutputChan <- finalResponse:
+					fmt.Printf("[CLI_SUCCESS] Session %s: Response sent to channel\n", process.SessionID)
+				default:
+					fmt.Printf("[CLI_DROPPED] Session %s: Output channel full\n", process.SessionID)
+				}
+			}()
 			
 		case <-process.StopChan:
 			fmt.Printf("[CLI_STOP] Session %s: Stopping message handler\n", process.SessionID)
