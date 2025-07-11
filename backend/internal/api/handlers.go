@@ -14,7 +14,6 @@ import (
 // Session data is retrieved from a cached copy that is automatically updated
 // when files change on disk.
 
-
 // Helper function to convert claude.Session to SessionResponse
 func sessionToResponse(session claude.Session) SessionResponse {
 	return SessionResponse{
@@ -72,17 +71,17 @@ func repoSessionToResponse(session claude.RepositorySession) SessionResponse {
 // Helper to calculate cost from detailed token usage
 func calculateCostFromTokens(tokens claude.RepositoryTokenUsage) float64 {
 	const (
-		inputCostPer1M              = 15.0
-		outputCostPer1M             = 75.0
-		cacheReadCostPer1M          = 1.50
-		cacheCreationCostPer1M      = 18.75
+		inputCostPer1M         = 15.0
+		outputCostPer1M        = 75.0
+		cacheReadCostPer1M     = 1.50
+		cacheCreationCostPer1M = 18.75
 	)
 
 	cost := float64(tokens.InputTokens) * inputCostPer1M / 1000000
 	cost += float64(tokens.OutputTokens) * outputCostPer1M / 1000000
 	cost += float64(tokens.CacheReadInputTokens) * cacheReadCostPer1M / 1000000
 	cost += float64(tokens.CacheCreationInputTokens) * cacheCreationCostPer1M / 1000000
-	
+
 	return cost
 }
 
@@ -102,19 +101,19 @@ func inferModelFromSession(session claude.Session) string {
 	// Look for model information in messages metadata - check multiple locations
 	for i := len(session.Messages) - 1; i >= 0; i-- {
 		msg := session.Messages[i]
-		
+
 		// Check if model is directly in Meta
 		if model, ok := msg.Meta["model"].(string); ok {
 			return model
 		}
-		
+
 		// Check if model is in nested message object within Meta
 		if msgData, ok := msg.Meta["message"].(map[string]interface{}); ok {
 			if model, ok := msgData["model"].(string); ok {
 				return model
 			}
 		}
-		
+
 		// Also check any other nested structures that might contain model info
 		for _, value := range msg.Meta {
 			if valueMap, ok := value.(map[string]interface{}); ok {
@@ -141,7 +140,7 @@ func filterSessionsByStatus(sessions []claude.Session, statuses ...claude.Sessio
 	for _, status := range statuses {
 		statusMap[status] = true
 	}
-	
+
 	for _, session := range sessions {
 		if statusMap[session.Status] {
 			filtered = append(filtered, session)
@@ -379,7 +378,7 @@ func (s *Server) getMetricsSummaryHandler(c *gin.Context) {
 		return
 	}
 
-	totalTokensUsed := tokenUsage.InputTokens + tokenUsage.OutputTokens + 
+	totalTokensUsed := tokenUsage.InputTokens + tokenUsage.OutputTokens +
 		tokenUsage.CacheCreationInputTokens + tokenUsage.CacheReadInputTokens
 
 	summary := MetricsSummary{
@@ -565,9 +564,9 @@ func (s *Server) getModelPerformanceHandler(c *gin.Context) {
 
 	// Map model names to display names
 	modelDisplayNames := map[string]string{
-		"claude-3-opus-20240229":    "Claude 3 Opus",
-		"claude-3-sonnet-20240229":  "Claude 3 Sonnet",
-		"claude-3-haiku-20240307":   "Claude 3 Haiku",
+		"claude-3-opus-20240229":     "Claude 3 Opus",
+		"claude-3-sonnet-20240229":   "Claude 3 Sonnet",
+		"claude-3-haiku-20240307":    "Claude 3 Haiku",
 		"claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
 		"claude-3-5-haiku-20241022":  "Claude 3.5 Haiku",
 	}
@@ -743,9 +742,9 @@ func (s *Server) getCostAnalyticsHandler(c *gin.Context) {
 	var breakdown []CostBreakdownEntry
 	for _, data := range costData.Breakdown {
 		entry := CostBreakdownEntry{
-			Name:       data.Name,
-			Cost:       data.Cost,
-			Tokens:     TokenBreakdown{
+			Name: data.Name,
+			Cost: data.Cost,
+			Tokens: TokenBreakdown{
 				Total:  data.TotalTokens,
 				Cached: data.CachedTokens,
 				Fresh:  data.FreshTokens,

@@ -9,7 +9,8 @@
       "Bash(done)",
       "Bash(sqlite3:*)",
       "Bash(./import-file:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(./cmd/import-file/import-file:*)"
     ],
     "deny": []
   }

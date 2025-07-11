@@ -14,7 +14,7 @@ import (
 // Helper function to create test sessions
 func createTestSessions() []claude.Session {
 	now := time.Now()
-	
+
 	return []claude.Session{
 		{
 			ID:           "session-1",
@@ -122,7 +122,7 @@ func createTestSessions() []claude.Session {
 func TestSessionToResponse(t *testing.T) {
 	session := createTestSessions()[0]
 	response := sessionToResponse(session)
-	
+
 	if response.ID != session.ID {
 		t.Errorf("ID mismatch: expected %s, got %s", session.ID, response.ID)
 	}
@@ -186,9 +186,9 @@ func TestSortSessionsByActivity(t *testing.T) {
 		{ID: "new", LastActivity: time.Now().Add(-1 * time.Minute)},
 		{ID: "middle", LastActivity: time.Now().Add(-30 * time.Minute)},
 	}
-	
+
 	sortSessionsByActivity(sessions)
-	
+
 	expectedOrder := []string{"new", "middle", "old"}
 	for i, expected := range expectedOrder {
 		if sessions[i].ID != expected {
@@ -200,19 +200,19 @@ func TestSortSessionsByActivity(t *testing.T) {
 // TestFilterSessionsByStatus tests session filtering
 func TestFilterSessionsByStatus(t *testing.T) {
 	sessions := createTestSessions()
-	
+
 	// Filter for active sessions
 	active := filterSessionsByStatus(sessions, claude.StatusWorking, claude.StatusIdle)
 	if len(active) != 2 {
 		t.Errorf("Expected 2 active sessions, got %d", len(active))
 	}
-	
+
 	// Filter for errors only
 	errors := filterSessionsByStatus(sessions, claude.StatusError)
 	if len(errors) != 1 {
 		t.Errorf("Expected 1 error session, got %d", len(errors))
 	}
-	
+
 	// Filter with no matching status
 	none := filterSessionsByStatus(sessions)
 	if len(none) != 0 {
@@ -223,27 +223,27 @@ func TestFilterSessionsByStatus(t *testing.T) {
 // TestHandlerHelper functions test the actual handler logic using mocked data
 func TestHandlerHelpers(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	// Test basic JSON response structure
 	t.Run("Basic JSON response", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		
+
 		c.JSON(http.StatusOK, gin.H{
 			"test": "value",
 			"num":  42,
 		})
-		
+
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d", w.Code)
 		}
-		
+
 		var response map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		if err != nil {
 			t.Fatalf("Failed to unmarshal response: %v", err)
 		}
-		
+
 		if response["test"] != "value" {
 			t.Errorf("Expected test='value', got %v", response["test"])
 		}
@@ -253,45 +253,45 @@ func TestHandlerHelpers(t *testing.T) {
 // TestMetricsCalculation tests metrics calculation logic
 func TestMetricsCalculation(t *testing.T) {
 	sessions := createTestSessions()
-	
+
 	// Test metrics calculation similar to getMetricsSummaryHandler
 	totalMessages := 0
 	totalTokens := 0
 	totalCost := 0.0
 	modelCount := make(map[string]int)
 	activeSessions := 0
-	
+
 	for _, session := range sessions {
 		totalMessages += session.GetMessageCount()
 		totalTokens += session.TokensUsed.TotalTokens
 		totalCost += session.TokensUsed.EstimatedCost
-		
+
 		if session.IsActive() {
 			activeSessions++
 		}
-		
+
 		// Count model usage
 		model := inferModelFromSession(session)
 		modelCount[model]++
 	}
-	
+
 	// Verify calculations
 	expectedMessages := 2 + 1 + 1 + 1 // Sum from test sessions
 	if totalMessages != expectedMessages {
 		t.Errorf("Expected %d total messages, got %d", expectedMessages, totalMessages)
 	}
-	
+
 	expectedTokens := 3000 + 2000 + 8000 + 0
 	if totalTokens != expectedTokens {
 		t.Errorf("Expected %d total tokens, got %d", expectedTokens, totalTokens)
 	}
-	
+
 	expectedCost := 0.07 + 0.05 + 0.18 + 0.0
 	tolerance := 0.001
 	if diff := totalCost - expectedCost; diff < -tolerance || diff > tolerance {
 		t.Errorf("Expected total cost %.3f, got %.3f", expectedCost, totalCost)
 	}
-	
+
 	if activeSessions != 1 { // Only session-1 is truly active (< 2 min)
 		t.Errorf("Expected 1 active session, got %d", activeSessions)
 	}
@@ -300,7 +300,7 @@ func TestMetricsCalculation(t *testing.T) {
 // TestSearchLogic tests search functionality
 func TestSearchLogic(t *testing.T) {
 	sessions := createTestSessions()
-	
+
 	tests := []struct {
 		name          string
 		query         string
@@ -338,43 +338,43 @@ func TestSearchLogic(t *testing.T) {
 			expectedIDs:   []string{},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Simulate the search logic from searchHandler
 			var results []claude.Session
-			
+
 			for _, session := range sessions {
 				matched := false
-				
+
 				// Search in project name
 				if session.ProjectName == tt.query {
 					matched = true
 				}
-				
+
 				// Search in current task (case insensitive contains)
 				if !matched {
 					for _, word := range []string{"feature", "implement"} {
-						if word == tt.query && (session.CurrentTask == "Implementing feature X" || 
-							session.Messages != nil && len(session.Messages) > 0 && 
-							session.Messages[len(session.Messages)-1].Content == "I'll help you implement that feature") {
+						if word == tt.query && (session.CurrentTask == "Implementing feature X" ||
+							session.Messages != nil && len(session.Messages) > 0 &&
+								session.Messages[len(session.Messages)-1].Content == "I'll help you implement that feature") {
 							matched = true
 							break
 						}
 					}
 				}
-				
+
 				// Search in message content
 				if !matched {
 					for _, msg := range session.Messages {
 						if (tt.query == "implement" && msg.Content == "I'll help you implement that feature") ||
-						   (tt.query == "feature" && msg.Content == "Help me implement feature X") {
+							(tt.query == "feature" && msg.Content == "Help me implement feature X") {
 							matched = true
 							break
 						}
 					}
 				}
-				
+
 				// Search in file paths
 				if !matched {
 					for _, filePath := range session.FilesModified {
@@ -384,22 +384,22 @@ func TestSearchLogic(t *testing.T) {
 						}
 					}
 				}
-				
+
 				if matched {
 					results = append(results, session)
 				}
 			}
-			
+
 			if len(results) != tt.expectedCount {
 				t.Errorf("Expected %d results, got %d", tt.expectedCount, len(results))
 			}
-			
+
 			// Verify expected IDs
 			resultIDs := make([]string, len(results))
 			for i, result := range results {
 				resultIDs[i] = result.ID
 			}
-			
+
 			for _, expectedID := range tt.expectedIDs {
 				found := false
 				for _, resultID := range resultIDs {
@@ -419,10 +419,10 @@ func TestSearchLogic(t *testing.T) {
 // TestActivityGeneration tests activity timeline generation
 func TestActivityGeneration(t *testing.T) {
 	sessions := createTestSessions()
-	
+
 	// Simulate activity generation similar to getActivityHandler
 	var activities []ActivityEntry
-	
+
 	for _, session := range sessions {
 		// Add session start activity
 		if !session.StartTime.IsZero() {
@@ -434,28 +434,28 @@ func TestActivityGeneration(t *testing.T) {
 				Details:     "Session started in " + session.ProjectName,
 			})
 		}
-		
+
 		// Add recent message activities
 		messageCount := len(session.Messages)
 		startIdx := messageCount - 3
 		if startIdx < 0 {
 			startIdx = 0
 		}
-		
+
 		for i := startIdx; i < messageCount; i++ {
 			msg := session.Messages[i]
 			activityType := "message_sent"
 			details := "User sent a message"
-			
+
 			if msg.Role == "assistant" {
 				details = "Assistant responded"
 			}
-			
+
 			if msg.Type == "error" {
 				activityType = "error"
 				details = "Error occurred"
 			}
-			
+
 			activities = append(activities, ActivityEntry{
 				Timestamp:   msg.Timestamp,
 				Type:        activityType,
@@ -465,22 +465,22 @@ func TestActivityGeneration(t *testing.T) {
 			})
 		}
 	}
-	
+
 	// Verify we have activities
 	if len(activities) == 0 {
 		t.Error("Expected some activities, got none")
 	}
-	
+
 	// Verify different activity types exist
 	types := make(map[string]bool)
 	for _, activity := range activities {
 		types[activity.Type] = true
 	}
-	
+
 	if !types["session_created"] {
 		t.Error("Expected session_created activities")
 	}
-	
+
 	if !types["message_sent"] {
 		t.Error("Expected message_sent activities")
 	}
@@ -489,17 +489,17 @@ func TestActivityGeneration(t *testing.T) {
 // TestUsageStatsCalculation tests usage statistics calculation
 func TestUsageStatsCalculation(t *testing.T) {
 	sessions := createTestSessions()
-	
+
 	// Test daily sessions calculation
 	dailySessions := make(map[string]int)
 	modelUsage := make(map[string]int)
-	
+
 	now := time.Now()
 	for i := 0; i < 7; i++ {
 		date := now.AddDate(0, 0, -i).Format("2006-01-02")
 		dailySessions[date] = 0
 	}
-	
+
 	for _, session := range sessions {
 		// Count daily sessions
 		if !session.StartTime.IsZero() {
@@ -508,22 +508,22 @@ func TestUsageStatsCalculation(t *testing.T) {
 				dailySessions[date]++
 			}
 		}
-		
+
 		// Count model usage
 		model := inferModelFromSession(session)
 		modelUsage[model]++
 	}
-	
+
 	// Verify we have some daily session data
 	totalDaily := 0
 	for _, count := range dailySessions {
 		totalDaily += count
 	}
-	
+
 	if totalDaily == 0 {
 		t.Error("Expected some daily session counts")
 	}
-	
+
 	// Verify model usage
 	if modelUsage["claude-3-opus"] < 1 {
 		t.Error("Expected at least 1 usage of claude-3-opus")
@@ -533,7 +533,7 @@ func TestUsageStatsCalculation(t *testing.T) {
 // TestErrorScenarios tests various error conditions
 func TestErrorScenarios(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	t.Run("Invalid query parameters", func(t *testing.T) {
 		// Test limit parameter validation (similar to getRecentSessionsHandler)
 		tests := []struct {
@@ -546,7 +546,7 @@ func TestErrorScenarios(t *testing.T) {
 			{"200", 100},    // Over max, should cap
 			{"15", 15},      // Valid
 		}
-		
+
 		for _, tt := range tests {
 			// Simulate limit parsing logic
 			limit := 10 // default
@@ -561,25 +561,25 @@ func TestErrorScenarios(t *testing.T) {
 					limit = 10 // keep default
 				}
 			}
-			
+
 			if limit != tt.expectedLimit {
 				t.Errorf("Limit %s: expected %d, got %d", tt.limit, tt.expectedLimit, limit)
 			}
 		}
 	})
-	
+
 	t.Run("Search query validation", func(t *testing.T) {
 		// Test query validation logic (similar to searchHandler)
 		tests := []struct {
 			query string
 			valid bool
 		}{
-			{"", false},                              // Empty
-			{"valid query", true},                    // Valid
-			{string(make([]byte, 101)), false},      // Too long
-			{"normal", true},                         // Normal
+			{"", false},                        // Empty
+			{"valid query", true},              // Valid
+			{string(make([]byte, 101)), false}, // Too long
+			{"normal", true},                   // Normal
 		}
-		
+
 		for _, tt := range tests {
 			valid := tt.query != "" && len(tt.query) <= 100
 			if valid != tt.valid {
@@ -592,7 +592,7 @@ func TestErrorScenarios(t *testing.T) {
 // BenchmarkSessionToResponse benchmarks the session conversion
 func BenchmarkSessionToResponse(b *testing.B) {
 	session := createTestSessions()[0]
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = sessionToResponse(session)
@@ -602,7 +602,7 @@ func BenchmarkSessionToResponse(b *testing.B) {
 // BenchmarkFilterSessions benchmarks session filtering
 func BenchmarkFilterSessions(b *testing.B) {
 	sessions := createTestSessions()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = filterSessionsByStatus(sessions, claude.StatusWorking, claude.StatusIdle)

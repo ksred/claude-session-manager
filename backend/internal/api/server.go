@@ -15,15 +15,15 @@ import (
 
 // Server represents the API server
 type Server struct {
-	config           *config.Config
-	router           *gin.Engine
-	logger           *logrus.Logger
-	wsHub            *WebSocketHub
-	sessionsCache    []claude.Session
-	sessionsMutex    sync.RWMutex
-	sessionWatcher   *claude.SessionWatcher
-	sessionRepo      *claude.SessionRepository
-	chatHandler      ChatMessageHandler
+	config         *config.Config
+	router         *gin.Engine
+	logger         *logrus.Logger
+	wsHub          *WebSocketHub
+	sessionsCache  []claude.Session
+	sessionsMutex  sync.RWMutex
+	sessionWatcher *claude.SessionWatcher
+	sessionRepo    *claude.SessionRepository
+	chatHandler    ChatMessageHandler
 }
 
 // NewServer creates a new API server instance
@@ -132,7 +132,7 @@ func (s *Server) setupMiddleware() {
 // @Router /health [get]
 func (s *Server) healthHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"status": "healthy",
+		"status":  "healthy",
 		"service": "claude-session-manager",
 	})
 }
