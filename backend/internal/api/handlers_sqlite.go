@@ -13,19 +13,19 @@ import (
 
 // SQLiteHandlers contains handlers that use the SQLite database
 type SQLiteHandlers struct {
-	repo         *database.SessionRepository
+	repo          *database.SessionRepository
 	readOptimized *database.ReadOptimizedRepository
-	adapter      *database.APIAdapter
-	logger       *logrus.Logger
+	adapter       *database.APIAdapter
+	logger        *logrus.Logger
 }
 
 // NewSQLiteHandlers creates new SQLite-based handlers
 func NewSQLiteHandlers(repo *database.SessionRepository, logger *logrus.Logger) *SQLiteHandlers {
 	return &SQLiteHandlers{
-		repo:         repo,
+		repo:          repo,
 		readOptimized: database.NewReadOptimizedRepository(repo.GetDB()),
-		adapter:      database.NewAPIAdapter(repo),
-		logger:       logger,
+		adapter:       database.NewAPIAdapter(repo),
+		logger:        logger,
 	}
 }
 
@@ -264,7 +264,7 @@ func (h *SQLiteHandlers) GetActivityHandler(c *gin.Context) {
 		limit = 500
 	}
 
-	activities, err := h.repo.GetRecentActivity(limit)
+	activities, err := h.readOptimized.GetRecentActivityOptimized(limit)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get recent activity from database")
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -288,14 +288,14 @@ func (h *SQLiteHandlers) GetActivityHandler(c *gin.Context) {
 // GetSessionActivityHandler returns activity for a specific session
 func (h *SQLiteHandlers) GetSessionActivityHandler(c *gin.Context) {
 	sessionID := c.Param("id")
-	
+
 	limitStr := c.DefaultQuery("limit", "50")
 	limit := 50
 	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
 		limit = l
 	}
 
-	activities, err := h.repo.GetSessionActivity(sessionID, limit)
+	activities, err := h.readOptimized.GetSessionActivityOptimized(sessionID, limit)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get session activity")
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -319,7 +319,7 @@ func (h *SQLiteHandlers) GetSessionActivityHandler(c *gin.Context) {
 // GetProjectActivityHandler returns activity for a specific project
 func (h *SQLiteHandlers) GetProjectActivityHandler(c *gin.Context) {
 	projectName := c.Param("projectName")
-	
+
 	limitStr := c.DefaultQuery("limit", "50")
 	limit := 50
 	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
@@ -498,11 +498,11 @@ func (h *SQLiteHandlers) GetRecentFilesHandler(c *gin.Context) {
 			"tool_name":     file.ToolName,
 			"occurrences":   file.Occurrences,
 		}
-		
+
 		if file.GitBranch != nil {
 			apiFile["git_branch"] = *file.GitBranch
 		}
-		
+
 		apiFiles = append(apiFiles, apiFile)
 	}
 
@@ -575,7 +575,7 @@ func (h *SQLiteHandlers) GetProjectRecentFilesHandler(c *gin.Context) {
 			"tools_used":          toolsList,
 			"total_modifications": file.TotalModifications,
 		}
-		
+
 		apiFiles = append(apiFiles, apiFile)
 	}
 
@@ -636,6 +636,7 @@ func (h *SQLiteHandlers) GetTokenTimelineHandler(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path string true "Session ID"
+// @Param hours query int false "Number of hours to look back (default: 168)"
 // @Param granularity query string false "Time granularity: minute, hour, day (default: minute)"
 // @Success 200 {object} TokenTimelineResponse "Successfully retrieved session token timeline"
 // @Failure 400 {object} ErrorResponse "Invalid parameters"
@@ -651,12 +652,27 @@ func (h *SQLiteHandlers) GetSessionTokenTimelineHandler(c *gin.Context) {
 		return
 	}
 
+	// Parse hours parameter with default of 168 (1 week)
+	hours := 168
+	if hoursStr := c.Query("hours"); hoursStr != "" {
+		if parsedHours, err := strconv.Atoi(hoursStr); err == nil && parsedHours > 0 {
+			hours = parsedHours
+		}
+	}
+
 	granularity := c.DefaultQuery("granularity", "minute")
 	if granularity != "minute" && granularity != "hour" && granularity != "day" {
 		granularity = "minute"
 	}
 
-	timeline, err := h.readOptimized.GetSessionTokenTimelineOptimized(sessionID, granularity)
+	// Log the request parameters
+	h.logger.WithFields(logrus.Fields{
+		"session_id":  sessionID,
+		"hours":       hours,
+		"granularity": granularity,
+	}).Debug("Getting session token timeline")
+
+	timeline, err := h.readOptimized.GetSessionTokenTimelineOptimized(sessionID, hours, granularity)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get session token timeline")
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -664,6 +680,14 @@ func (h *SQLiteHandlers) GetSessionTokenTimelineHandler(c *gin.Context) {
 		})
 		return
 	}
+
+	// Log the result count
+	h.logger.WithFields(logrus.Fields{
+		"session_id":     sessionID,
+		"timeline_count": len(timeline),
+		"hours":          hours,
+		"granularity":    granularity,
+	}).Debug("Retrieved session token timeline")
 
 	// If no timeline data, check if session exists
 	if len(timeline) == 0 {
@@ -675,7 +699,7 @@ func (h *SQLiteHandlers) GetSessionTokenTimelineHandler(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		// Session exists but has no token usage data yet - return empty timeline
 		c.JSON(http.StatusOK, gin.H{
 			"session_id":  sessionID,

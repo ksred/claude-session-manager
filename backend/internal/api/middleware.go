@@ -16,7 +16,7 @@ func CORSMiddleware(cfg *config.Config) gin.HandlerFunc {
 		// Set allowed origins
 		origin := c.Request.Header.Get("Origin")
 		allowedOrigin := ""
-		
+
 		// Check if origin is allowed
 		for _, allowed := range cfg.Server.CORS.AllowedOrigins {
 			if allowed == "*" || allowed == origin {
@@ -24,26 +24,26 @@ func CORSMiddleware(cfg *config.Config) gin.HandlerFunc {
 				break
 			}
 		}
-		
+
 		if allowedOrigin != "" {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 		}
-		
+
 		// Set credentials
 		if cfg.Server.CORS.AllowCredentials {
 			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
-		
+
 		// Set allowed headers
 		if len(cfg.Server.CORS.AllowedHeaders) > 0 {
 			c.Writer.Header().Set("Access-Control-Allow-Headers", strings.Join(cfg.Server.CORS.AllowedHeaders, ", "))
 		}
-		
+
 		// Set allowed methods
 		if len(cfg.Server.CORS.AllowedMethods) > 0 {
 			c.Writer.Header().Set("Access-Control-Allow-Methods", strings.Join(cfg.Server.CORS.AllowedMethods, ", "))
 		}
-		
+
 		// Set max age
 		if cfg.Server.CORS.MaxAge > 0 {
 			c.Writer.Header().Set("Access-Control-Max-Age", fmt.Sprintf("%d", cfg.Server.CORS.MaxAge))

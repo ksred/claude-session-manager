@@ -54,11 +54,12 @@ type PricingConfig struct {
 
 // FeaturesConfig contains feature flags and settings
 type FeaturesConfig struct {
-	EnableWebSocket   bool `mapstructure:"enable_websocket"`
-	EnableFileWatcher bool `mapstructure:"enable_file_watcher"`
-	EnableMetrics     bool `mapstructure:"enable_metrics"`
-	EnableProfiling   bool `mapstructure:"enable_profiling"`
-	DebugMode         bool `mapstructure:"debug_mode"`
+	EnableWebSocket      bool `mapstructure:"enable_websocket"`
+	EnableFileWatcher    bool `mapstructure:"enable_file_watcher"`
+	EnableMetrics        bool `mapstructure:"enable_metrics"`
+	EnableProfiling      bool `mapstructure:"enable_profiling"`
+	DebugMode            bool `mapstructure:"debug_mode"`
+	WebSocketBatchInterval int  `mapstructure:"websocket_batch_interval"` // seconds
 }
 
 // DefaultConfig returns the default configuration
@@ -104,6 +105,7 @@ func DefaultConfig() *Config {
 			EnableMetrics:     false,
 			EnableProfiling:   false,
 			DebugMode:         false,
+			WebSocketBatchInterval: 20, // 20 seconds default
 		},
 	}
 }
@@ -197,6 +199,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("features.enable_metrics", defaults.Features.EnableMetrics)
 	v.SetDefault("features.enable_profiling", defaults.Features.EnableProfiling)
 	v.SetDefault("features.debug_mode", defaults.Features.DebugMode)
+	v.SetDefault("features.websocket_batch_interval", defaults.Features.WebSocketBatchInterval)
 }
 
 // validateConfig validates the configuration

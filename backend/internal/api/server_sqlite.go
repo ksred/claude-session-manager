@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/ksred/claude-session-manager/internal/chat"
 	"github.com/ksred/claude-session-manager/internal/config"
 	"github.com/ksred/claude-session-manager/internal/database"
 	"github.com/sirupsen/logrus"
@@ -24,6 +25,7 @@ type SQLiteServer struct {
 	sessionRepo    *database.SessionRepository
 	fileWatcher    *database.ClaudeFileWatcher
 	sqliteHandlers *SQLiteHandlers
+	chatHandler    *chat.WebSocketChatHandler
 	ctx            context.Context
 	cancel         context.CancelFunc
 	httpServer     *http.Server
@@ -77,6 +79,22 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Create chat components if WebSocket is enabled
+	var chatHandler *chat.WebSocketChatHandler
+	if cfg.Features.EnableWebSocket && wsHub != nil {
+		// Create chat repository (Database embeds *sqlx.DB, so we pass db directly)
+		chatRepo := chat.NewRepository(db.DB)
+
+		// Create CLI manager
+		cliManager := chat.NewCLIManager(chatRepo)
+
+		// Create chat handler
+		chatHandler = chat.NewWebSocketChatHandler(cliManager, chatRepo, logger)
+
+		// Set the chat handler on the WebSocket hub
+		wsHub.ChatHandler = chatHandler
+	}
+
 	server := &SQLiteServer{
 		config:         cfg,
 		router:         router,
@@ -85,12 +103,32 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 		db:             db,
 		sessionRepo:    sessionRepo,
 		sqliteHandlers: NewSQLiteHandlers(sessionRepo, logger),
+		chatHandler:    chatHandler,
 		ctx:            ctx,
 		cancel:         cancel,
 	}
 
 	// Start WebSocket hub if enabled
 	if server.wsHub != nil {
+		// Create and set up the event batcher
+		batchInterval := time.Duration(cfg.Features.WebSocketBatchInterval) * time.Second
+		if batchInterval < 10*time.Second {
+			batchInterval = 10 * time.Second // Minimum 10 seconds
+		}
+		if batchInterval > 30*time.Second {
+			batchInterval = 30 * time.Second // Maximum 30 seconds
+		}
+		batcher := NewEventBatcher(server.wsHub, logger, batchInterval)
+		server.wsHub.SetBatcher(batcher)
+
+		// Start the batcher
+		go func() {
+			logger.Info("Event batcher goroutine started")
+			batcher.Start(ctx)
+			logger.Info("Event batcher goroutine exited")
+		}()
+
+		// Start the WebSocket hub
 		go func() {
 			logger.Info("WebSocket hub goroutine started")
 			server.wsHub.Run(ctx)
@@ -98,8 +136,12 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 		}()
 	}
 
+	// Create completion channel for import process
+	importDone := make(chan struct{})
+
 	// Import existing data (this can take a while) - run in background
 	go func() {
+		defer close(importDone)
 		logger.Info("Import goroutine started")
 		logger.Info("Starting background import of existing session data (press Ctrl+C to cancel)")
 		if err := server.importExistingData(); err != nil {
@@ -114,7 +156,7 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 		logger.Info("Import goroutine exited")
 	}()
 
-	// Setup file watcher if enabled - but start it after import to avoid database locks
+	// Setup file watcher if enabled - start it after import completes
 	if cfg.Features.EnableFileWatcher {
 		go func() {
 			logger.Info("File watcher setup goroutine started")
@@ -124,14 +166,14 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 				logger.Info("File watcher setup cancelled due to shutdown")
 				logger.Info("File watcher setup goroutine exited")
 				return
-			case <-time.After(2 * time.Minute):
+			case <-importDone:
 				// Check context again before proceeding
 				if ctx.Err() != nil {
 					logger.Info("File watcher setup cancelled due to shutdown")
 					logger.Info("File watcher setup goroutine exited")
 					return
 				}
-				logger.Info("Starting file watcher after import delay")
+				logger.Info("Starting file watcher after import completion")
 				if err := server.setupFileWatcher(); err != nil {
 					logger.WithError(err).Error("Failed to setup file watcher")
 				}
@@ -243,7 +285,7 @@ func (s *SQLiteServer) setupRoutes() {
 
 	// Static files (if needed)
 	s.router.Static("/static", "./static")
-	
+
 	// Swagger documentation
 	// Note: You'll need to update the swagger imports if using this
 	// s.router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -311,7 +353,7 @@ func (s *SQLiteServer) websocketHandler(c *gin.Context) {
 // importExistingData imports existing JSONL files into the database using incremental import
 func (s *SQLiteServer) importExistingData() error {
 	s.logger.Info("Starting initial data import from JSONL files (press Ctrl+C to cancel)")
-	
+
 	// Use incremental importer to avoid re-processing files
 	incrementalImporter := database.NewIncrementalImporter(s.ctx, s.sessionRepo, s.db, s.logger)
 	if err := incrementalImporter.ImportClaudeDirectory(s.config.Claude.HomeDirectory, false); err != nil {

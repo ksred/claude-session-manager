@@ -1,9 +1,9 @@
 package api
 
 import (
+	_ "github.com/ksred/claude-session-manager/docs"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	_ "github.com/ksred/claude-session-manager/docs"
 )
 
 // setupRoutes configures all API routes
@@ -48,7 +48,7 @@ func (s *Server) setupRoutes() {
 
 	// Static files (if needed)
 	s.router.Static("/static", "./static")
-	
+
 	// Swagger documentation
 	s.router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }

@@ -55,6 +55,24 @@ func NewDatabase(config Config) (*Database, error) {
 		logger: config.Logger,
 	}
 
+	// Check database integrity
+	checker := NewIntegrityChecker(db.DB, config.DatabasePath, config.Logger)
+	if err := checker.CheckIntegrity(); err != nil {
+		config.Logger.WithError(err).Warn("Database integrity check failed, attempting repair")
+		if repairErr := checker.RepairDatabase(); repairErr != nil {
+			db.Close()
+			return nil, fmt.Errorf("database corruption detected and repair failed: %w", repairErr)
+		}
+		// Reconnect after repair
+		db.Close()
+		dsn := config.DatabasePath + "?_journal_mode=WAL&_timeout=30000&_foreign_keys=on&_busy_timeout=30000&_synchronous=NORMAL&_cache_size=10000"
+		db, err = sqlx.Connect("sqlite3", dsn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to reconnect after repair: %w", err)
+		}
+		database.DB = db
+	}
+
 	// Run migrations
 	if err := database.migrate(); err != nil {
 		db.Close()

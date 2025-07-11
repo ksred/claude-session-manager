@@ -797,7 +797,7 @@ func (r *SessionRepository) GetTokenTimeline(hours int, granularity string) ([]T
 }
 
 // GetSessionTokenTimeline returns token usage over time for a specific session
-func (r *SessionRepository) GetSessionTokenTimeline(sessionID string, granularity string) ([]TokenTimelineEntry, error) {
+func (r *SessionRepository) GetSessionTokenTimeline(sessionID string, hours int, granularity string) ([]TokenTimelineEntry, error) {
 	// Determine the time format based on granularity
 	var timeFormat string
 	switch granularity {
@@ -824,12 +824,13 @@ func (r *SessionRepository) GetSessionTokenTimeline(sessionID string, granularit
 		FROM messages m
 		LEFT JOIN token_usage tu ON m.id = tu.message_id
 		WHERE m.session_id = ?
+		AND m.timestamp >= datetime('now', '-' || ? || ' hours')
 		GROUP BY strftime(?, m.timestamp)
 		ORDER BY timestamp ASC
 	`
 
 	var entries []TokenTimelineEntry
-	err := r.db.Select(&entries, query, timeFormat, sessionID, timeFormat)
+	err := r.db.Select(&entries, query, timeFormat, sessionID, hours, timeFormat)
 	return entries, err
 }
 

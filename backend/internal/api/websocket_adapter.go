@@ -80,10 +80,10 @@ func (w *WebSocketUpdateAdapter) OnActivityUpdate(activity *database.ActivityLog
 	}
 
 	w.logger.WithFields(logrus.Fields{
-		"type":         "activity_update",
+		"type":          "activity_update",
 		"activity_type": activity.ActivityType,
-		"session_id":   sessionID,
-		"details":      activity.Details,
+		"session_id":    sessionID,
+		"details":       activity.Details,
 	}).Info("WebSocket adapter received activity update notification")
 
 	// Convert activity to API format
@@ -95,9 +95,9 @@ func (w *WebSocketUpdateAdapter) OnActivityUpdate(activity *database.ActivityLog
 	}
 
 	w.logger.WithFields(logrus.Fields{
-		"type":         "activity_update",
+		"type":          "activity_update",
 		"activity_type": activity.ActivityType,
-		"session_id":   sessionID,
+		"session_id":    sessionID,
 	}).Info("Sending activity update to WebSocket hub for broadcast")
 
 	w.wsHub.BroadcastUpdate("activity_update", data)

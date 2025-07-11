@@ -18,16 +18,17 @@ import (
 
 // ClaudeFileWatcher monitors the Claude directory for changes and updates the database
 type ClaudeFileWatcher struct {
-	claudeDir      string
-	repo           *SessionRepository
-	importer       *Importer
-	logger         *logrus.Logger
-	watcher        *fsnotify.Watcher
-	mu             sync.RWMutex
-	stopCh         chan struct{}
-	doneCh         chan struct{}
-	updateCallback UpdateCallback
-	started        bool
+	claudeDir           string
+	repo                *SessionRepository
+	importer            *Importer
+	incrementalImporter *IncrementalImporter
+	logger              *logrus.Logger
+	watcher             *fsnotify.Watcher
+	mu                  sync.RWMutex
+	stopCh              chan struct{}
+	doneCh              chan struct{}
+	updateCallback      UpdateCallback
+	started             bool
 }
 
 // UpdateCallback is called when sessions are updated
@@ -45,15 +46,17 @@ func NewFileWatcher(claudeDir string, repo *SessionRepository, logger *logrus.Lo
 	}
 
 	importer := NewImporter(repo, logger)
+	incrementalImporter := NewIncrementalImporter(context.Background(), repo, repo.db, logger)
 
 	fw := &ClaudeFileWatcher{
-		claudeDir: claudeDir,
-		repo:      repo,
-		importer:  importer,
-		logger:    logger,
-		watcher:   watcher,
-		stopCh:    make(chan struct{}),
-		doneCh:    make(chan struct{}),
+		claudeDir:           claudeDir,
+		repo:                repo,
+		importer:            importer,
+		incrementalImporter: incrementalImporter,
+		logger:              logger,
+		watcher:             watcher,
+		stopCh:              make(chan struct{}),
+		doneCh:              make(chan struct{}),
 	}
 
 	return fw, nil
@@ -210,8 +213,8 @@ func (fw *ClaudeFileWatcher) handleFileCreate(filePath string) {
 
 // handleFileWrite handles file modification events
 func (fw *ClaudeFileWatcher) handleFileWrite(filePath string) {
-	// For modified files, process incrementally
-	fw.processJSONLFileIncremental(filePath)
+	// For modified files, use the incremental importer
+	fw.processFileWithIncrementalImporter(filePath)
 }
 
 // handleFileRemove handles file removal events
@@ -219,6 +222,58 @@ func (fw *ClaudeFileWatcher) handleFileRemove(filePath string) {
 	// When a file is removed, we could optionally mark sessions as inactive
 	// For now, we'll leave the data in the database
 	fw.logger.WithField("file", filePath).Info("JSONL file removed")
+}
+
+// processFileWithIncrementalImporter uses the incremental importer for real-time updates
+func (fw *ClaudeFileWatcher) processFileWithIncrementalImporter(filePath string) {
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+
+	// Extract project info from file path
+	projectInfo := fw.extractProjectInfo(filePath)
+	
+	// Create a batch importer
+	batchImporter := NewBatchImporter(fw.repo, fw.logger)
+	
+	// Use incremental import that won't delete existing data
+	sessions, messages, err := batchImporter.ImportJSONLFileIncremental(filePath, projectInfo)
+	if err != nil {
+		fw.logger.WithError(err).WithField("file", filePath).Error("Failed to process JSONL file incrementally")
+		return
+	}
+
+	fw.logger.WithFields(logrus.Fields{
+		"file":         filePath,
+		"sessions":     sessions,
+		"new_messages": messages,
+	}).Info("Processed JSONL file incrementally")
+	
+	// Get session ID from file for notifications
+	sessionID := strings.TrimSuffix(filepath.Base(filePath), ".jsonl")
+	
+	// Notify about updates if we processed new messages
+	if messages > 0 && fw.updateCallback != nil {
+		// Get the session data for notification
+		if sessionSummary, err := fw.repo.GetSessionByID(sessionID); err == nil {
+			// Convert SessionSummary to Session for the callback
+			session := &Session{
+				ID:              sessionSummary.ID,
+				ProjectPath:     sessionSummary.ProjectPath,
+				ProjectName:     sessionSummary.ProjectName,
+				FilePath:        filePath, // Use the actual file path
+				GitBranch:       "",       // SessionSummary doesn't have this field
+				GitWorktree:     "",       // SessionSummary doesn't have this field
+				StartTime:       sessionSummary.StartTime,
+				LastActivity:    sessionSummary.LastActivity,
+				IsActive:        sessionSummary.IsActive,
+				Status:          sessionSummary.Status,
+				Model:           sessionSummary.Model,
+				MessageCount:    sessionSummary.MessageCount,
+				DurationSeconds: sessionSummary.DurationSeconds,
+			}
+			fw.updateCallback.OnSessionUpdate("session_update", sessionID, session)
+		}
+	}
 }
 
 // processJSONLFile processes a complete JSONL file

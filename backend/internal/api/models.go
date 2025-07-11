@@ -9,22 +9,22 @@ import (
 // SessionResponse represents the API response for a session
 // @Description Session information with metadata and statistics
 type SessionResponse struct {
-	ID            string                `json:"id" example:"session_123456" description:"Unique session identifier"`
-	Title         string                `json:"title" example:"Implement user authentication" description:"Session title or current task"`
-	ProjectPath   string                `json:"project_path" example:"/home/user/my-project" description:"Absolute path to the project directory"`
-	ProjectName   string                `json:"project_name" example:"my-awesome-project" description:"Name of the project"`
-	GitBranch     string                `json:"git_branch,omitempty" example:"feature/auth" description:"Current Git branch"`
-	GitWorktree   string                `json:"git_worktree,omitempty" example:"main" description:"Git worktree information"`
-	Status        string                `json:"status" example:"active" description:"Session status" enums:"active,idle,completed,error"`
-	CreatedAt     time.Time             `json:"created_at" example:"2023-01-01T10:00:00Z" description:"Session creation timestamp"`
-	UpdatedAt     time.Time             `json:"updated_at" example:"2023-01-01T11:30:00Z" description:"Last activity timestamp"`
-	MessageCount  int                   `json:"message_count" example:"25" description:"Total number of messages in session"`
-	CurrentTask   string                `json:"current_task" example:"Implement user authentication" description:"Current task description"`
-	TokensUsed    claude.TokenUsage     `json:"tokens_used" description:"Token usage statistics"`
-	FilesModified []string              `json:"files_modified" example:"[\"/src/auth.go\",\"/src/user.go\"]" description:"List of modified files"`
-	Duration      int64                 `json:"duration_seconds" example:"5400" description:"Session duration in seconds"`
-	IsActive      bool                  `json:"is_active" example:"true" description:"Whether session is currently active"`
-	Model         string                `json:"model" example:"claude-3-opus" description:"Claude model used"`
+	ID            string            `json:"id" example:"session_123456" description:"Unique session identifier"`
+	Title         string            `json:"title" example:"Implement user authentication" description:"Session title or current task"`
+	ProjectPath   string            `json:"project_path" example:"/home/user/my-project" description:"Absolute path to the project directory"`
+	ProjectName   string            `json:"project_name" example:"my-awesome-project" description:"Name of the project"`
+	GitBranch     string            `json:"git_branch,omitempty" example:"feature/auth" description:"Current Git branch"`
+	GitWorktree   string            `json:"git_worktree,omitempty" example:"main" description:"Git worktree information"`
+	Status        string            `json:"status" example:"active" description:"Session status" enums:"active,idle,completed,error"`
+	CreatedAt     time.Time         `json:"created_at" example:"2023-01-01T10:00:00Z" description:"Session creation timestamp"`
+	UpdatedAt     time.Time         `json:"updated_at" example:"2023-01-01T11:30:00Z" description:"Last activity timestamp"`
+	MessageCount  int               `json:"message_count" example:"25" description:"Total number of messages in session"`
+	CurrentTask   string            `json:"current_task" example:"Implement user authentication" description:"Current task description"`
+	TokensUsed    claude.TokenUsage `json:"tokens_used" description:"Token usage statistics"`
+	FilesModified []string          `json:"files_modified" example:"[\"/src/auth.go\",\"/src/user.go\"]" description:"List of modified files"`
+	Duration      int64             `json:"duration_seconds" example:"5400" description:"Session duration in seconds"`
+	IsActive      bool              `json:"is_active" example:"true" description:"Whether session is currently active"`
+	Model         string            `json:"model" example:"claude-3-opus" description:"Claude model used"`
 }
 
 // SessionsResponse represents the response for sessions list
@@ -206,10 +206,10 @@ type CostProjection struct {
 // CostAnalyticsResponse represents the response for cost analytics
 // @Description Cost analytics data with breakdown and projections
 type CostAnalyticsResponse struct {
-	TotalCost    float64               `json:"total_cost" example:"125.50" description:"Total cost in USD"`
-	CacheSavings float64               `json:"cache_savings" example:"35.20" description:"Estimated savings from cache hits in USD"`
-	Breakdown    []CostBreakdownEntry  `json:"breakdown" description:"Cost breakdown by group"`
-	Projection   CostProjection        `json:"projection" description:"Cost projections"`
+	TotalCost    float64              `json:"total_cost" example:"125.50" description:"Total cost in USD"`
+	CacheSavings float64              `json:"cache_savings" example:"35.20" description:"Estimated savings from cache hits in USD"`
+	Breakdown    []CostBreakdownEntry `json:"breakdown" description:"Cost breakdown by group"`
+	Projection   CostProjection       `json:"projection" description:"Cost projections"`
 }
 
 // RecentFile represents a recently modified file
@@ -238,11 +238,11 @@ type RecentFilesResponse struct {
 // ProjectRecentFile represents a file modified within a specific project
 // @Description File modification information for a specific project
 type ProjectRecentFile struct {
-	FilePath           string                    `json:"file_path" example:"/src/app.ts" description:"Full path to the modified file"`
-	LastModified       string                    `json:"last_modified" example:"2023-01-01T10:00:00Z" description:"Last modification timestamp"`
+	FilePath           string                     `json:"file_path" example:"/src/app.ts" description:"Full path to the modified file"`
+	LastModified       string                     `json:"last_modified" example:"2023-01-01T10:00:00Z" description:"Last modification timestamp"`
 	Sessions           []ProjectRecentFileSession `json:"sessions" description:"Sessions that modified this file"`
-	ToolsUsed          []string                  `json:"tools_used" example:"[\"Edit\", \"Write\"]" description:"List of tools used to modify the file"`
-	TotalModifications int                       `json:"total_modifications" example:"8" description:"Total number of modifications"`
+	ToolsUsed          []string                   `json:"tools_used" example:"[\"Edit\", \"Write\"]" description:"List of tools used to modify the file"`
+	TotalModifications int                        `json:"total_modifications" example:"8" description:"Total number of modifications"`
 }
 
 // ProjectRecentFileSession represents session info for a project recent file
@@ -277,10 +277,10 @@ type TokenTimelineEntry struct {
 // TokenTimelineResponse represents the response for token timeline endpoints
 // @Description Response containing token usage timeline data
 type TokenTimelineResponse struct {
-	Timeline     []TokenTimelineEntry `json:"timeline" description:"List of timeline data points"`
-	Hours        int                  `json:"hours,omitempty" example:"24" description:"Number of hours included"`
-	Granularity  string               `json:"granularity" example:"hour" description:"Time granularity (minute, hour, day)"`
-	Total        int                  `json:"total" example:"24" description:"Total number of data points"`
-	SessionID    string               `json:"session_id,omitempty" example:"session_123456" description:"Session ID (for session-specific timeline)"`
-	ProjectName  string               `json:"project_name,omitempty" example:"my-app" description:"Project name (for project-specific timeline)"`
+	Timeline    []TokenTimelineEntry `json:"timeline" description:"List of timeline data points"`
+	Hours       int                  `json:"hours,omitempty" example:"24" description:"Number of hours included"`
+	Granularity string               `json:"granularity" example:"hour" description:"Time granularity (minute, hour, day)"`
+	Total       int                  `json:"total" example:"24" description:"Total number of data points"`
+	SessionID   string               `json:"session_id,omitempty" example:"session_123456" description:"Session ID (for session-specific timeline)"`
+	ProjectName string               `json:"project_name,omitempty" example:"my-app" description:"Project name (for project-specific timeline)"`
 }
