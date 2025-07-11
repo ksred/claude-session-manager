@@ -127,6 +127,10 @@ func (bi *BatchImporter) ImportJSONLFileOptimized(filePath string, projectInfo P
 				CacheReadInputTokens:     msg.Message.Usage.CacheReadInputTokens,
 			}
 			
+			// Calculate total tokens
+			usage.TotalTokens = usage.InputTokens + usage.OutputTokens + 
+				usage.CacheCreationInputTokens + usage.CacheReadInputTokens
+			
 			// Calculate cost
 			model := ""
 			if s, ok := sessionMap[sessionID]; ok {

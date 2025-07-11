@@ -127,18 +127,18 @@ func (bo *BatchOperations) batchUpsertTokenUsages(tx *sqlx.Tx, tokenUsages []Tok
 
 	query := `
 		INSERT OR REPLACE INTO token_usage (message_id, session_id, input_tokens, output_tokens, 
-			cache_creation_input_tokens, cache_read_input_tokens, estimated_cost) 
+			cache_creation_input_tokens, cache_read_input_tokens, total_tokens, estimated_cost) 
 		VALUES `
 	
 	var values []string
 	var args []interface{}
 	
 	for i, tu := range tokenUsages {
-		placeholders := fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d)",
-			i*7+1, i*7+2, i*7+3, i*7+4, i*7+5, i*7+6, i*7+7)
+		placeholders := fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+			i*8+1, i*8+2, i*8+3, i*8+4, i*8+5, i*8+6, i*8+7, i*8+8)
 		values = append(values, placeholders)
 		args = append(args, tu.MessageID, tu.SessionID, tu.InputTokens, tu.OutputTokens,
-			tu.CacheCreationInputTokens, tu.CacheReadInputTokens, tu.EstimatedCost)
+			tu.CacheCreationInputTokens, tu.CacheReadInputTokens, tu.TotalTokens, tu.EstimatedCost)
 	}
 	
 	query += strings.Join(values, ", ")
