@@ -134,7 +134,7 @@ export const useSessionActivity = (sessionId: string | undefined, limit: number 
     queryKey: ['activity', 'session', sessionId, limit],
     queryFn: () => sessionService.getSessionActivity(sessionId!, limit),
     enabled: !!sessionId,
-    staleTime: 30000, // 30 seconds
+    staleTime: 0, // Always consider stale to force refetch on session change
     refetchInterval: 60000, // 1 minute
   });
 };
@@ -178,7 +178,7 @@ export const useSessionTokenTimeline = (sessionId: string | null, hours: number 
     queryKey: [...sessionKeys.sessionTokenTimeline(sessionId || ''), { hours, granularity }],
     queryFn: () => sessionService.getSessionTokenTimeline(sessionId!, hours, granularity),
     enabled: !!sessionId,
-    staleTime: 60000,
+    staleTime: 0, // Always consider stale to force refetch on session change
     refetchInterval: 120000,
     retry: 3,
   });
