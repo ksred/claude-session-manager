@@ -4,6 +4,7 @@ import { useWebSocket } from '../../hooks/useWebSocket';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { ActivityIcon } from '../ActivityFeed/ActivityIcon';
 
 interface TerminalChatProps {
   sessionId: string;
@@ -12,10 +13,11 @@ interface TerminalChatProps {
 
 interface ChatMessage {
   id: string;
-  type: 'user' | 'claude' | 'system';
+  type: 'user' | 'claude' | 'system' | 'activity';
   content: string;
   timestamp: Date;
   metadata?: Record<string, any>;
+  activityType?: 'message_sent' | 'session_created' | 'session_updated' | 'file_modified' | 'error';
 }
 
 interface ChatState {
@@ -65,6 +67,29 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
     });
   }, [sessionId, sendMessage]);
 
+  // Load chat history
+  const loadChatHistory = useCallback(async () => {
+    try {
+      const { sessionService } = await import('../../services/sessionService');
+      const response = await sessionService.getChatMessages(sessionId);
+      if (response.messages && response.messages.length > 0) {
+        const historicalMessages: ChatMessage[] = response.messages.map((msg: any) => ({
+          id: msg.id,
+          type: msg.type,
+          content: msg.content,
+          timestamp: new Date(msg.timestamp),
+          metadata: msg.metadata,
+        }));
+        setState(prev => ({
+          ...prev,
+          messages: [...historicalMessages, ...prev.messages],
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to load chat history:', error);
+    }
+  }, [sessionId]);
+
   // Update connection status
   useEffect(() => {
     setState(prev => ({ ...prev, isConnected }));
@@ -74,9 +99,12 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
   useEffect(() => {
     if (isConnected && state.status === 'idle' && !sessionStartedRef.current) {
       sessionStartedRef.current = true;
-      startChatSession();
+      // Load history first, then start session
+      loadChatHistory().then(() => {
+        startChatSession();
+      });
     }
-  }, [isConnected, state.status, startChatSession]);
+  }, [isConnected, state.status, startChatSession, loadChatHistory]);
 
   // End chat session on unmount
   useEffect(() => {
@@ -204,6 +232,27 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
               }));
             }
             break;
+
+          case 'activity_update':
+            // Show activity updates in the chat if they're related to this session
+            if (message.data?.session_id === sessionId && message.data?.activity) {
+              const activity = message.data.activity;
+              setState(prev => ({
+                ...prev,
+                messages: [
+                  ...prev.messages,
+                  {
+                    id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    type: 'activity',
+                    content: activity.details || activity.message || 'Activity update',
+                    timestamp: new Date(activity.timestamp || Date.now()),
+                    activityType: activity.type,
+                    metadata: { activity }
+                  },
+                ],
+              }));
+            }
+            break;
         }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
@@ -244,11 +293,47 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
     }
   };
 
+  // Map activity types to icon types
+  const getActivityIconType = (activityType?: string): 'working' | 'complete' | 'error' => {
+    switch (activityType) {
+      case 'message_sent':
+        return 'working';
+      case 'session_created':
+      case 'session_updated':
+      case 'file_modified':
+        return 'complete';
+      case 'error':
+        return 'error';
+      default:
+        return 'working';
+    }
+  };
+
   // Render message with markdown support
   const renderMessage = (message: ChatMessage) => {
     if (message.type === 'system') {
       return (
         <div className="text-gray-500 text-sm italic">{message.content}</div>
+      );
+    }
+
+    if (message.type === 'activity') {
+      const iconType = getActivityIconType(message.activityType);
+      return (
+        <div className="activity-message flex items-start gap-3 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+          <ActivityIcon type={iconType} className="mt-0.5 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm text-yellow-400 mb-1">
+              Activity Update
+            </div>
+            <div className="text-sm text-gray-300 mb-2">
+              {message.content}
+            </div>
+            <div className="text-xs text-gray-500">
+              {new Date(message.timestamp).toLocaleTimeString()} • {message.activityType || 'activity'}
+            </div>
+          </div>
+        </div>
       );
     }
 

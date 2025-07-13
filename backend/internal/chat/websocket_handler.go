@@ -307,6 +307,11 @@ func (h *WebSocketChatHandler) monitorCLIOutput(sessionID string, broadcastFn fu
 			// Check for output from CLI process
 			outputs, err := h.cliManager.GetProcessOutput(sessionID)
 			if err != nil {
+				// If no active process exists, stop monitoring
+				if err.Error() == fmt.Sprintf("no active process for session %s", sessionID) {
+					h.logger.WithField("session_id", sessionID).Info("No active CLI process found, stopping output monitoring")
+					return
+				}
 				h.logger.WithError(err).WithField("session_id", sessionID).Debug("Error getting process output")
 				continue
 			}
@@ -365,6 +370,11 @@ func (h *WebSocketChatHandler) monitorCLIOutput(sessionID string, broadcastFn fu
 			// Check for errors from CLI process
 			errors, err := h.cliManager.GetProcessErrors(sessionID)
 			if err != nil {
+				// If no active process exists, stop monitoring
+				if err.Error() == fmt.Sprintf("no active process for session %s", sessionID) {
+					h.logger.WithField("session_id", sessionID).Info("No active CLI process found, stopping error monitoring")
+					return
+				}
 				h.logger.WithError(err).WithField("session_id", sessionID).Debug("Error getting process errors")
 				continue
 			}

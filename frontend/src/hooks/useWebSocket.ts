@@ -310,6 +310,11 @@ export const useWebSocket = () => {
               break;
               
             case 'activity_update':
+              // Forward activity updates to TerminalChat if they're for a specific session
+              if (message.data?.session_id) {
+                window.postMessage(event.data, window.location.origin);
+              }
+              
               // Invalidate activity data
               debouncedInvalidator.current.debounceInvalidation(
                 'activity',
