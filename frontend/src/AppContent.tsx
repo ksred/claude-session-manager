@@ -24,6 +24,13 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { groupSessionsByProject } from './utils/projectHelpers';
 import { transformTokenTimelineToChartData, transformTokenTimelineToLineChartData } from './utils/formatters';
 
+// Feature flags
+// To enable terminal chat: Set TERMINAL_CHAT to true
+// Terminal chat will only show for UI-initiated sessions (not imported ones)
+const FEATURES = {
+  TERMINAL_CHAT: false // Set to true to enable terminal chat feature
+};
+
 export const AppContent: React.FC = () => {
   const queryClient = useQueryClient();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -85,8 +92,8 @@ export const AppContent: React.FC = () => {
     ? sessions.find(s => s.id === selectedSessionId) || null
     : null;
 
-  // Show terminal only for UI-initiated sessions
-  const showTerminal = selectedSession?.source === 'ui';
+  // Show terminal only for UI-initiated sessions AND when feature is enabled
+  const showTerminal = FEATURES.TERMINAL_CHAT && selectedSession?.source === 'ui';
 
   const projects = useMemo(() => groupSessionsByProject(sessions), [sessions]);
   const selectedProject = selectedProjectId 
