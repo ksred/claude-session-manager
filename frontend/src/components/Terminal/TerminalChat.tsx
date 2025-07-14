@@ -4,6 +4,7 @@ import { useWebSocket } from '../../hooks/useWebSocket';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { ActivityIcon } from '../ActivityFeed/ActivityIcon';
 
 interface TerminalChatProps {
   sessionId: string;
@@ -12,10 +13,11 @@ interface TerminalChatProps {
 
 interface ChatMessage {
   id: string;
-  type: 'user' | 'claude' | 'system';
+  type: 'user' | 'claude' | 'system' | 'activity';
   content: string;
   timestamp: Date;
   metadata?: Record<string, any>;
+  activityType?: 'message_sent' | 'session_created' | 'session_updated' | 'file_modified' | 'error';
 }
 
 interface ChatState {
@@ -34,6 +36,7 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
     isTyping: false,
     status: 'idle',
   });
+  const sessionStartedRef = useRef(false);
   const [input, setInput] = useState('');
   const [isComposing, setIsComposing] = useState(false);
   
@@ -55,18 +58,6 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
     inputRef.current?.focus();
   }, []);
 
-  // Update connection status
-  useEffect(() => {
-    setState(prev => ({ ...prev, isConnected }));
-  }, [isConnected]);
-
-  // Start chat session when component mounts
-  useEffect(() => {
-    if (isConnected && state.status === 'idle') {
-      startChatSession();
-    }
-  }, [isConnected, state.status]);
-
   // Start a new chat session
   const startChatSession = useCallback(() => {
     setState(prev => ({ ...prev, status: 'starting' }));
@@ -75,6 +66,45 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
       session_id: sessionId,
     });
   }, [sessionId, sendMessage]);
+
+  // Load chat history
+  const loadChatHistory = useCallback(async () => {
+    try {
+      const { sessionService } = await import('../../services/sessionService');
+      const response = await sessionService.getChatMessages(sessionId);
+      if (response.messages && response.messages.length > 0) {
+        const historicalMessages: ChatMessage[] = response.messages.map((msg: any) => ({
+          id: msg.id,
+          type: msg.type,
+          content: msg.content,
+          timestamp: new Date(msg.timestamp),
+          metadata: msg.metadata,
+        }));
+        setState(prev => ({
+          ...prev,
+          messages: [...historicalMessages, ...prev.messages],
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to load chat history:', error);
+    }
+  }, [sessionId]);
+
+  // Update connection status
+  useEffect(() => {
+    setState(prev => ({ ...prev, isConnected }));
+  }, [isConnected]);
+
+  // Start chat session when component mounts
+  useEffect(() => {
+    if (isConnected && state.status === 'idle' && !sessionStartedRef.current) {
+      sessionStartedRef.current = true;
+      // Load history first, then start session
+      loadChatHistory().then(() => {
+        startChatSession();
+      });
+    }
+  }, [isConnected, state.status, startChatSession, loadChatHistory]);
 
   // End chat session on unmount
   useEffect(() => {
@@ -92,19 +122,21 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
   useEffect(() => {
     const handleWebSocketMessage = (event: MessageEvent) => {
       try {
-        const data = JSON.parse(event.data);
+        // The WebSocket hook forwards the raw event.data, so we need to parse it
+        const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        console.log('TerminalChat received message:', message.type, message.data?.session_id);
         
-        switch (data.type) {
+        switch (message.type) {
           case 'chat:session:start':
-            if (data.data?.session_id === sessionId) {
+            if (message.data?.session_id === sessionId) {
               setState(prev => ({
                 ...prev,
                 status: 'active',
-                chatSessionId: data.data.metadata?.chat_session_id,
+                chatSessionId: message.data.metadata?.chat_session_id,
                 messages: [
                   ...prev.messages,
                   {
-                    id: `system-${Date.now()}`,
+                    id: `system-start-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                     type: 'system',
                     content: 'Chat session started. You can now talk to Claude.',
                     timestamp: new Date(),
@@ -115,7 +147,7 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
             break;
 
           case 'chat:session:end':
-            if (data.data?.session_id === sessionId) {
+            if (message.data?.session_id === sessionId) {
               setState(prev => ({
                 ...prev,
                 status: 'idle',
@@ -123,7 +155,7 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
                 messages: [
                   ...prev.messages,
                   {
-                    id: `system-${Date.now()}`,
+                    id: `system-end-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                     type: 'system',
                     content: 'Chat session ended.',
                     timestamp: new Date(),
@@ -134,17 +166,17 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
             break;
 
           case 'chat:message:send':
-            if (data.data?.session_id === sessionId && data.data?.metadata?.echo) {
+            if (message.data?.session_id === sessionId && message.data?.metadata?.echo) {
               setState(prev => ({
                 ...prev,
                 messages: [
                   ...prev.messages,
                   {
-                    id: data.data.metadata.message_id || `user-${Date.now()}`,
+                    id: message.data.metadata.message_id || `user-${Date.now()}`,
                     type: 'user',
-                    content: data.data.content,
-                    timestamp: new Date(data.data.timestamp),
-                    metadata: data.data.metadata,
+                    content: message.data.content,
+                    timestamp: new Date(message.data.timestamp),
+                    metadata: message.data.metadata,
                   },
                 ],
               }));
@@ -152,18 +184,18 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
             break;
 
           case 'chat:message:receive':
-            if (data.data?.session_id === sessionId) {
+            if (message.data?.session_id === sessionId) {
               setState(prev => ({
                 ...prev,
                 isTyping: false,
                 messages: [
                   ...prev.messages,
                   {
-                    id: data.data.metadata?.message_id || `claude-${Date.now()}`,
+                    id: message.data.metadata?.message_id || `claude-${Date.now()}`,
                     type: 'claude',
-                    content: data.data.content,
-                    timestamp: new Date(data.data.timestamp),
-                    metadata: data.data.metadata,
+                    content: message.data.content,
+                    timestamp: new Date(message.data.timestamp),
+                    metadata: message.data.metadata,
                   },
                 ],
               }));
@@ -171,30 +203,51 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
             break;
 
           case 'chat:typing:start':
-            if (data.data?.session_id === sessionId) {
+            if (message.data?.session_id === sessionId) {
               setState(prev => ({ ...prev, isTyping: true }));
             }
             break;
 
           case 'chat:typing:stop':
-            if (data.data?.session_id === sessionId) {
+            if (message.data?.session_id === sessionId) {
               setState(prev => ({ ...prev, isTyping: false }));
             }
             break;
 
           case 'chat:error':
-            if (data.data?.session_id === sessionId) {
+            if (message.data?.session_id === sessionId) {
               setState(prev => ({
                 ...prev,
                 status: 'error',
-                error: data.data.content,
+                error: message.data.content,
                 messages: [
                   ...prev.messages,
                   {
-                    id: `error-${Date.now()}`,
+                    id: `error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                     type: 'system',
-                    content: `Error: ${data.data.content}`,
+                    content: `Error: ${message.data.content}`,
                     timestamp: new Date(),
+                  },
+                ],
+              }));
+            }
+            break;
+
+          case 'activity_update':
+            // Show activity updates in the chat if they're related to this session
+            if (message.data?.session_id === sessionId && message.data?.activity) {
+              const activity = message.data.activity;
+              setState(prev => ({
+                ...prev,
+                messages: [
+                  ...prev.messages,
+                  {
+                    id: `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    type: 'activity',
+                    content: activity.details || activity.message || 'Activity update',
+                    timestamp: new Date(activity.timestamp || Date.now()),
+                    activityType: activity.type,
+                    metadata: { activity }
                   },
                 ],
               }));
@@ -240,11 +293,47 @@ export const TerminalChat: React.FC<TerminalChatProps> = ({ sessionId, className
     }
   };
 
+  // Map activity types to icon types
+  const getActivityIconType = (activityType?: string): 'working' | 'complete' | 'error' => {
+    switch (activityType) {
+      case 'message_sent':
+        return 'working';
+      case 'session_created':
+      case 'session_updated':
+      case 'file_modified':
+        return 'complete';
+      case 'error':
+        return 'error';
+      default:
+        return 'working';
+    }
+  };
+
   // Render message with markdown support
   const renderMessage = (message: ChatMessage) => {
     if (message.type === 'system') {
       return (
         <div className="text-gray-500 text-sm italic">{message.content}</div>
+      );
+    }
+
+    if (message.type === 'activity') {
+      const iconType = getActivityIconType(message.activityType);
+      return (
+        <div className="activity-message flex items-start gap-3 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+          <ActivityIcon type={iconType} className="mt-0.5 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm text-yellow-400 mb-1">
+              Activity Update
+            </div>
+            <div className="text-sm text-gray-300 mb-2">
+              {message.content}
+            </div>
+            <div className="text-xs text-gray-500">
+              {new Date(message.timestamp).toLocaleTimeString()} • {message.activityType || 'activity'}
+            </div>
+          </div>
+        </div>
       );
     }
 

@@ -295,6 +295,37 @@ func (fw *ClaudeFileWatcher) processJSONLFile(filePath string) {
 		"sessions": sessions,
 		"messages": messages,
 	}).Debug("Processed JSONL file")
+	
+	// Get session ID from file and notify about new session
+	if sessions > 0 && fw.updateCallback != nil {
+		sessionID := strings.TrimSuffix(filepath.Base(filePath), ".jsonl")
+		
+		// Get the session data for notification
+		if sessionSummary, err := fw.repo.GetSessionByID(sessionID); err == nil {
+			// Convert SessionSummary to Session for the callback
+			session := &Session{
+				ID:              sessionSummary.ID,
+				ProjectPath:     sessionSummary.ProjectPath,
+				ProjectName:     sessionSummary.ProjectName,
+				FilePath:        filePath,
+				StartTime:       sessionSummary.StartTime,
+				LastActivity:    sessionSummary.LastActivity,
+				IsActive:        sessionSummary.IsActive,
+				Status:          sessionSummary.Status,
+				Model:           sessionSummary.Model,
+				MessageCount:    sessionSummary.MessageCount,
+				DurationSeconds: sessionSummary.DurationSeconds,
+			}
+			
+			fw.logger.WithFields(logrus.Fields{
+				"update_type":  "session_created",
+				"session_id":   session.ID,
+				"project_name": session.ProjectName,
+			}).Info("File watcher notifying callback about new session")
+			
+			fw.updateCallback.OnSessionUpdate("session_created", sessionID, session)
+		}
+	}
 }
 
 // processJSONLFileIncremental processes only new lines in a JSONL file
@@ -408,16 +439,20 @@ func (fw *ClaudeFileWatcher) processSingleMessage(msg JSONLMessage, projectInfo 
 		session.Model = *msg.Message.Model
 	}
 
-	// Get existing session to preserve start time and message count
-	if existing, err := fw.repo.GetSessionByID(msg.SessionID); err == nil {
-		session.StartTime = existing.StartTime
-		session.MessageCount = existing.MessageCount + 1
-		session.DurationSeconds = int64(session.LastActivity.Sub(session.StartTime).Seconds())
-	} else {
+	// Check if this is a new session BEFORE we upsert
+	isNewSession := false
+	existing, err := fw.repo.GetSessionByID(msg.SessionID)
+	if err != nil {
 		// New session
+		isNewSession = true
 		session.StartTime = msg.Timestamp
 		session.MessageCount = 1
 		session.DurationSeconds = 0
+	} else {
+		// Existing session - preserve start time and increment message count
+		session.StartTime = existing.StartTime
+		session.MessageCount = existing.MessageCount + 1
+		session.DurationSeconds = int64(session.LastActivity.Sub(session.StartTime).Seconds())
 	}
 
 	if err := fw.repo.UpsertSession(session); err != nil {
@@ -427,7 +462,7 @@ func (fw *ClaudeFileWatcher) processSingleMessage(msg JSONLMessage, projectInfo 
 	// Notify about session update
 	if fw.updateCallback != nil {
 		updateType := "session_update"
-		if _, err := fw.repo.GetSessionByID(msg.SessionID); err != nil {
+		if isNewSession {
 			updateType = "session_created"
 		}
 		fw.logger.WithFields(logrus.Fields{

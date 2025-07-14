@@ -88,5 +88,25 @@ export const sessionService = {
       params: { hours, granularity }
     });
     return response.data;
+  },
+
+  // Create a new UI session
+  createSession: async (data: { project_name: string; project_path: string; model?: string }): Promise<Session> => {
+    const response = await api.post('/sessions/create', data);
+    return response.data;
+  },
+
+  // Get sessions (simplified method)
+  getSessions: async (): Promise<Session[]> => {
+    const response = await api.get('/sessions');
+    return response.data.sessions;
+  },
+
+  // Get chat messages for a session
+  getChatMessages: async (sessionId: string, limit: number = 100, offset: number = 0): Promise<any> => {
+    const response = await api.get(`/chat/sessions/${sessionId}/messages`, {
+      params: { limit, offset }
+    });
+    return response.data;
   }
 };

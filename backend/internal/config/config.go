@@ -81,7 +81,7 @@ func DefaultConfig() *Config {
 			ShutdownTimeout: 10,
 			CORS: CORSConfig{
 				Enabled:          true,
-				AllowedOrigins:   []string{"*"},
+				AllowedOrigins:   []string{"*", "http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"},
 				AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 				AllowedHeaders:   []string{"Origin", "Content-Type", "Accept", "Authorization"},
 				AllowCredentials: true,

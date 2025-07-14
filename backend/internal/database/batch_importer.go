@@ -138,10 +138,18 @@ func (bi *BatchImporter) importJSONLFileOptimized(filePath string, projectInfo P
 
 		// Create or update session
 		if session, exists := sessionMap[sessionID]; !exists {
+			// Extract actual project path from CWD field, fallback to parsed project info
+			actualProjectPath := projectInfo.ProjectPath
+			actualProjectName := projectInfo.ProjectName
+			if msg.CWD != "" {
+				actualProjectPath = msg.CWD
+				actualProjectName = filepath.Base(actualProjectPath)
+			}
+			
 			session = &Session{
 				ID:             sessionID,
-				ProjectPath:    projectInfo.ProjectPath,
-				ProjectName:    projectInfo.ProjectName,
+				ProjectPath:    actualProjectPath,
+				ProjectName:    actualProjectName,
 				FilePath:       filePath,
 				GitBranch:      "", // Will be populated if available
 				GitWorktree:    "", // Will be populated if available

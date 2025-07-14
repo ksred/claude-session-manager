@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from './components/Layout/AppLayout';
 import { SessionSidebar } from './components/Sidebar/SessionSidebar';
 import { SessionDetailView } from './components/Dashboard/SessionDetailView';
@@ -16,19 +17,27 @@ import {
   useTokenTimeline,
   useSessionTokenTimeline,
   useProjectTokenTimeline,
-  useRefreshData 
+  useRefreshData,
+  sessionKeys
 } from './hooks/useSessionData';
 import { useWebSocket } from './hooks/useWebSocket';
 import { groupSessionsByProject } from './utils/projectHelpers';
 import { transformTokenTimelineToChartData, transformTokenTimelineToLineChartData } from './utils/formatters';
 
+// Feature flags
+// To enable terminal chat: Set TERMINAL_CHAT to true
+// Terminal chat will only show for UI-initiated sessions (not imported ones)
+const FEATURES = {
+  TERMINAL_CHAT: false // Set to true to enable terminal chat feature
+};
+
 export const AppContent: React.FC = () => {
+  const queryClient = useQueryClient();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'session' | 'project' | 'analytics'>('session');
   const [timeRange, setTimeRange] = useState(168);
   const [timeGranularity, setTimeGranularity] = useState<'minute' | 'hour' | 'day'>('minute');
-  const [showTerminal] = useState(true); // Enable terminal chat feature
 
   // API data hooks
   const { data: sessionsData, isLoading: sessionsLoading, error: sessionsError } = useAllSessions();
@@ -82,6 +91,9 @@ export const AppContent: React.FC = () => {
   const selectedSession = selectedSessionId 
     ? sessions.find(s => s.id === selectedSessionId) || null
     : null;
+
+  // Show terminal only for UI-initiated sessions AND when feature is enabled
+  const showTerminal = FEATURES.TERMINAL_CHAT && selectedSession?.source === 'ui';
 
   const projects = useMemo(() => groupSessionsByProject(sessions), [sessions]);
   const selectedProject = selectedProjectId 
@@ -194,6 +206,10 @@ export const AppContent: React.FC = () => {
           onProjectSelect={handleProjectSelect}
           metricsSummary={metricsSummary}
           onAnalyticsSelect={handleAnalyticsSelect}
+          onSessionCreated={() => {
+            // Invalidate sessions query to refresh the list
+            queryClient.invalidateQueries({ queryKey: sessionKeys.list({}) });
+          }}
         />
       }
       main={

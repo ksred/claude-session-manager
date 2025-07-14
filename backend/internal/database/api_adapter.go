@@ -56,6 +56,7 @@ func (a *APIAdapter) SessionSummaryToSessionResponse(summary *SessionSummary) (*
 		Duration:      summary.DurationSeconds,
 		IsActive:      summary.IsActive,
 		Model:         summary.Model,
+		Source:        summary.Source,
 	}, nil
 }
 
@@ -113,6 +114,8 @@ type SessionResponse struct {
 	Duration      int64             `json:"duration_seconds"`
 	IsActive      bool              `json:"is_active"`
 	Model         string            `json:"model"`
+	Source        string            `json:"source,omitempty"`
+	ChatSessionID string            `json:"chat_session_id,omitempty"`
 }
 
 // ActivityEntry represents an activity entry for the API
@@ -122,4 +125,37 @@ type ActivityEntry struct {
 	SessionID   string    `json:"session_id"`
 	SessionName string    `json:"session_name"`
 	Details     string    `json:"details"`
+}
+
+// SessionToSessionResponse converts a Session model to API SessionResponse
+func (a *APIAdapter) SessionToSessionResponse(session *Session) (*SessionResponse, error) {
+	// For new UI sessions, we don't have token usage yet
+	tokenUsage := claude.TokenUsage{
+		InputTokens:              0,
+		OutputTokens:             0,
+		CacheCreationInputTokens: 0,
+		CacheReadInputTokens:     0,
+		TotalTokens:              0,
+		EstimatedCost:            0,
+	}
+
+	return &SessionResponse{
+		ID:            session.ID,
+		Title:         session.ProjectName,
+		ProjectPath:   session.ProjectPath,
+		ProjectName:   session.ProjectName,
+		GitBranch:     session.GitBranch,
+		GitWorktree:   session.GitWorktree,
+		Status:        session.Status,
+		CreatedAt:     session.StartTime,
+		UpdatedAt:     session.LastActivity,
+		MessageCount:  session.MessageCount,
+		CurrentTask:   session.ProjectName,
+		TokensUsed:    tokenUsage,
+		FilesModified: []string{},
+		Duration:      session.DurationSeconds,
+		IsActive:      session.IsActive,
+		Model:         session.Model,
+		Source:        session.Source,
+	}, nil
 }

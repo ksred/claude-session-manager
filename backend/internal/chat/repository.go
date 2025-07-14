@@ -87,6 +87,13 @@ func (r *Repository) UpdateChatSessionActivity(id string) error {
 	return err
 }
 
+// UpdateChatSessionClaudeID updates the Claude session ID for continuity
+func (r *Repository) UpdateChatSessionClaudeID(id string, claudeSessionID string) error {
+	query := `UPDATE chat_sessions SET claude_session_id = ?, last_activity = ? WHERE id = ?`
+	_, err := r.db.Exec(query, claudeSessionID, time.Now(), id)
+	return err
+}
+
 // GetActiveChatSessions retrieves all active chat sessions
 func (r *Repository) GetActiveChatSessions() ([]*ChatSession, error) {
 	var sessions []*ChatSession

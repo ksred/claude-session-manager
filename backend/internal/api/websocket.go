@@ -186,7 +186,7 @@ func (h *WebSocketHub) shouldBatchEvent(eventType string) bool {
 	case "session_new", "session_deleted", "sessions_updated":
 		return false
 	// Chat events should not be batched for real-time experience
-	case "chat:message:recv", "chat:message:send", "chat:error":
+	case "chat:session:start", "chat:session:end", "chat:message:receive", "chat:message:send", "chat:error", "chat:typing:start", "chat:typing:stop":
 		return false
 	default:
 		// Default to batching unknown events

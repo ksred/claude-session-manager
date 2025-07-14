@@ -391,6 +391,8 @@ func (i *Importer) importSession(sessionID string, messages []JSONLMessage, proj
 	startTime := messages[0].Timestamp
 	lastActivity := messages[0].Timestamp
 	var model string
+	var actualProjectPath string
+	var actualProjectName string
 	
 	for _, msg := range messages {
 		if msg.Timestamp.Before(startTime) {
@@ -402,6 +404,17 @@ func (i *Importer) importSession(sessionID string, messages []JSONLMessage, proj
 		if msg.Message.Model != nil {
 			model = *msg.Message.Model
 		}
+		// Extract the actual project path from CWD field in messages
+		if msg.CWD != "" && actualProjectPath == "" {
+			actualProjectPath = msg.CWD
+			actualProjectName = filepath.Base(actualProjectPath)
+		}
+	}
+	
+	// Fallback to parsed project info if no CWD found in messages
+	if actualProjectPath == "" {
+		actualProjectPath = projectInfo.ProjectPath
+		actualProjectName = projectInfo.ProjectName
 	}
 
 	// Determine if session is active (activity within last 2 minutes)
@@ -411,8 +424,8 @@ func (i *Importer) importSession(sessionID string, messages []JSONLMessage, proj
 	// Create session
 	session := &Session{
 		ID:              sessionID,
-		ProjectPath:     projectInfo.ProjectPath,
-		ProjectName:     projectInfo.ProjectName,
+		ProjectPath:     actualProjectPath,
+		ProjectName:     actualProjectName,
 		FilePath:        filePath,
 		StartTime:       startTime,
 		LastActivity:    lastActivity,

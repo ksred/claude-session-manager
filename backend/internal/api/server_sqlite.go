@@ -15,6 +15,25 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// SessionRepositoryAdapter adapts database.SessionRepository to chat.SessionRepository
+type SessionRepositoryAdapter struct {
+	sessionRepo *database.SessionRepository
+}
+
+// GetSessionByID adapts the database SessionSummary to chat SessionData
+func (a *SessionRepositoryAdapter) GetSessionByID(sessionID string) (*chat.SessionData, error) {
+	summary, err := a.sessionRepo.GetSessionByID(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	
+	return &chat.SessionData{
+		ID:          summary.ID,
+		ProjectPath: summary.ProjectPath,
+		ProjectName: summary.ProjectName,
+	}, nil
+}
+
 // SQLiteServer represents the API server using SQLite database
 type SQLiteServer struct {
 	config         *config.Config
@@ -85,8 +104,14 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 		// Create chat repository (Database embeds *sqlx.DB, so we pass db directly)
 		chatRepo := chat.NewRepository(db.DB)
 
+		// Create session repository for session data access
+		sessionRepo := database.NewSessionRepository(db, logger)
+
+		// Create session repository adapter for CLI manager
+		sessionRepoAdapter := &SessionRepositoryAdapter{sessionRepo: sessionRepo}
+
 		// Create CLI manager
-		cliManager := chat.NewCLIManager(chatRepo)
+		cliManager := chat.NewCLIManager(chatRepo, sessionRepoAdapter)
 
 		// Create chat handler
 		chatHandler = chat.NewWebSocketChatHandler(cliManager, chatRepo, logger)
@@ -246,6 +271,13 @@ func (s *SQLiteServer) setupRoutes() {
 			sessions.GET("/recent", s.sqliteHandlers.GetRecentSessionsHandler)
 			sessions.GET("/:id/tokens/timeline", s.sqliteHandlers.GetSessionTokenTimelineHandler)
 			sessions.GET("/:id/activity", s.sqliteHandlers.GetSessionActivityHandler)
+			sessions.POST("/create", s.sqliteHandlers.CreateSessionHandler)
+		}
+
+		// Chat routes
+		chat := v1.Group("/chat")
+		{
+			chat.GET("/sessions/:sessionId/messages", s.sqliteHandlers.GetChatMessagesHandler)
 		}
 
 		// Metrics routes using SQLite handlers
