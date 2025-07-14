@@ -13,7 +13,9 @@
       "Bash(./test_claude_output.sh:*)",
       "Bash(./test_claude_interactive.sh:*)",
       "Bash(rm:*)",
-      "Bash(./cmd/import-file/import-file:*)"
+      "Bash(./cmd/import-file/import-file:*)",
+      "Bash(true)",
+      "WebFetch(domain:docs.anthropic.com)"
     ],
     "deny": []
   }

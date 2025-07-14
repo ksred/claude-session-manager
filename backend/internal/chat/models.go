@@ -6,12 +6,13 @@ import (
 
 // ChatSession represents an active chat session with Claude CLI
 type ChatSession struct {
-	ID           string    `json:"id" db:"id"`
-	SessionID    string    `json:"session_id" db:"session_id"`
-	ProcessID    int       `json:"process_id" db:"process_id"`
-	Status       string    `json:"status" db:"status"`
-	StartedAt    time.Time `json:"started_at" db:"started_at"`
-	LastActivity time.Time `json:"last_activity" db:"last_activity"`
+	ID              string     `json:"id" db:"id"`
+	SessionID       string     `json:"session_id" db:"session_id"`
+	ProcessID       int        `json:"process_id" db:"process_id"`
+	Status          string     `json:"status" db:"status"`
+	StartedAt       time.Time  `json:"started_at" db:"started_at"`
+	LastActivity    time.Time  `json:"last_activity" db:"last_activity"`
+	ClaudeSessionID *string    `json:"claude_session_id" db:"claude_session_id"` // Claude's session ID for continuity (nullable)
 }
 
 // ChatMessage represents a message in a chat session

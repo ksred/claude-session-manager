@@ -115,6 +115,27 @@ run-build: build
 	@echo "Running built binary..."
 	$(BUILD_DIR)/$(BINARY_NAME) serve
 
+# Run in background with logging
+.PHONY: run-logs
+run-logs:
+	@echo "Starting server in background with logging to server.log..."
+	@nohup $(GOCMD) run $(CMD_DIR) serve --debug > server.log 2>&1 & echo $$! > server.pid
+	@echo "Server started. PID: $$(cat server.pid)"
+	@echo "Logs are being written to server.log"
+	@echo "Use 'tail -f server.log' to follow logs"
+	@echo "Use 'make stop' to stop the server"
+
+# Stop the background server
+.PHONY: stop
+stop:
+	@if [ -f server.pid ]; then \
+		echo "Stopping server (PID: $$(cat server.pid))..."; \
+		kill $$(cat server.pid) 2>/dev/null || echo "Server already stopped"; \
+		rm -f server.pid; \
+	else \
+		echo "No server.pid found"; \
+	fi
+
 # Test the application
 .PHONY: test
 test:
@@ -307,6 +328,7 @@ help:
 	@echo "  run            Run the application directly"
 	@echo "  run-build      Build and run the binary"
 	@echo "  run-config     Build and run with custom config"
+	@echo "  run-logs       Tail the server.log file"
 	@echo "  dev            Full development workflow (deps, format, vet, test, build, run)"
 	@echo "  deps           Install dependencies"
 	@echo ""

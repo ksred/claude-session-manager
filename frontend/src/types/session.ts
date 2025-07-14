@@ -16,6 +16,7 @@ export interface Session {
   model: string;
   tokens_used: TokenUsage;
   files_modified: string[];
+  source?: 'import' | 'ui'; // Source of the session
   
   // Computed fields for UI
   progress?: number;

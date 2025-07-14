@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/ksred/claude-session-manager/internal/chat"
 	"github.com/sirupsen/logrus"
 )
 
@@ -961,4 +963,66 @@ func (r *SessionRepository) GetProjectRecentFiles(projectName string, limit int,
 	}
 
 	return files, nil
+}
+
+// CreateUISession creates a new UI-initiated session
+func (r *SessionRepository) CreateUISession(projectPath, projectName, model string) (*Session, error) {
+	now := time.Now()
+	session := &Session{
+		ID:             uuid.New().String(),
+		ProjectPath:    projectPath,
+		ProjectName:    projectName,
+		FilePath:       "",
+		GitBranch:      "",
+		GitWorktree:    "",
+		StartTime:      now,
+		LastActivity:   now,
+		IsActive:       true,
+		Status:         "active",
+		Model:          model,
+		MessageCount:   0,
+		DurationSeconds: 0,
+		Source:         "ui",
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+
+	query := `
+		INSERT INTO sessions (
+			id, project_path, project_name, file_path, git_branch, git_worktree,
+			start_time, last_activity, is_active, status, model, message_count,
+			duration_seconds, source, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	_, err := r.db.DB.Exec(query,
+		session.ID, session.ProjectPath, session.ProjectName, session.FilePath,
+		session.GitBranch, session.GitWorktree, session.StartTime, session.LastActivity,
+		session.IsActive, session.Status, session.Model, session.MessageCount,
+		session.DurationSeconds, session.Source, session.CreatedAt, session.UpdatedAt)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return session, nil
+}
+
+// GetChatMessages retrieves chat messages for a session
+func (r *SessionRepository) GetChatMessages(sessionID string, limit, offset int) ([]*chat.ChatMessage, error) {
+	// First check if there's an active chat session for this session ID
+	chatRepo := chat.NewRepository(r.db.DB)
+	chatSession, err := chatRepo.GetChatSessionBySessionID(sessionID)
+	if err != nil || chatSession == nil {
+		// No chat session, return empty array
+		return []*chat.ChatMessage{}, nil
+	}
+
+	// Get messages from the chat session
+	messages, err := chatRepo.GetChatMessages(chatSession.ID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	return messages, nil
 }

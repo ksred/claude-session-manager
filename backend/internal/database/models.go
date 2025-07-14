@@ -20,6 +20,7 @@ type Session struct {
 	Model          string    `db:"model" json:"model"`
 	MessageCount   int       `db:"message_count" json:"message_count"`
 	DurationSeconds int64    `db:"duration_seconds" json:"duration_seconds"`
+	Source         string    `db:"source" json:"source"` // 'import' or 'ui'
 	CreatedAt      time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt      time.Time `db:"updated_at" json:"updated_at"`
 }
@@ -122,6 +123,7 @@ type SessionSummary struct {
 	Model                      string    `db:"model" json:"model"`
 	MessageCount               int       `db:"message_count" json:"message_count"`
 	DurationSeconds            int64     `db:"duration_seconds" json:"duration_seconds"`
+	Source                     string    `db:"source" json:"source"`
 	TotalInputTokens           int       `db:"total_input_tokens" json:"total_input_tokens"`
 	TotalOutputTokens          int       `db:"total_output_tokens" json:"total_output_tokens"`
 	TotalCacheCreationTokens   int       `db:"total_cache_creation_tokens" json:"total_cache_creation_tokens"`

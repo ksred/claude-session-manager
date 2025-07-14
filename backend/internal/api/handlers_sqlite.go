@@ -778,3 +778,90 @@ func (h *SQLiteHandlers) GetProjectTokenTimelineHandler(c *gin.Context) {
 		"total":        len(timeline),
 	})
 }
+
+// CreateSessionHandler creates a new UI-initiated session
+func (h *SQLiteHandlers) CreateSessionHandler(c *gin.Context) {
+	var req struct {
+		ProjectPath string `json:"project_path" binding:"required"`
+		ProjectName string `json:"project_name" binding:"required"`
+		Model       string `json:"model"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid request body",
+		})
+		return
+	}
+
+	// Set default model if not provided
+	if req.Model == "" {
+		req.Model = "claude-opus-4-20250514"
+	}
+
+	// Create the session
+	session, err := h.repo.CreateUISession(req.ProjectPath, req.ProjectName, req.Model)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to create UI session")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to create session",
+		})
+		return
+	}
+
+	// Convert to API response
+	response, err := h.adapter.SessionToSessionResponse(session)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to convert session to response")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to format session response",
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, response)
+}
+
+// GetChatMessagesHandler returns chat messages for a session
+func (h *SQLiteHandlers) GetChatMessagesHandler(c *gin.Context) {
+	sessionID := c.Param("sessionId")
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Session ID is required",
+		})
+		return
+	}
+
+	// Parse query parameters
+	limit := 100
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		}
+	}
+
+	offset := 0
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if parsed, err := strconv.Atoi(offsetStr); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	// Get chat messages
+	messages, err := h.repo.GetChatMessages(sessionID, limit, offset)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get chat messages")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve chat messages",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"session_id": sessionID,
+		"messages":   messages,
+		"limit":      limit,
+		"offset":     offset,
+		"total":      len(messages),
+	})
+}
