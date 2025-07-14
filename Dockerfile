@@ -73,14 +73,14 @@ nodaemon=true
 user=root
 
 [program:backend]
-command=/app/backend/claude-session-manager serve
+command=sh -c 'exec /app/backend/claude-session-manager serve'
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-environment=PORT="8080",CLAUDE_DIR="/data/claude",SQLITE_JOURNAL_MODE="WAL",SQLITE_BUSY_TIMEOUT="10000"
+environment=PORT="8080",SQLITE_JOURNAL_MODE="WAL",SQLITE_BUSY_TIMEOUT="10000"
 
 [program:nginx]
 command=nginx -g 'daemon off;'
@@ -108,9 +108,16 @@ export CLAUDE_DIR="${CLAUDE_DIR:-/data/claude}"
 echo "Starting Claude Session Manager..."
 echo "Using Claude directory: $CLAUDE_DIR"
 
+# Handle both .claude mount patterns
+if [ -d "/data/.claude" ]; then
+    echo "Detected .claude mounted at /data/.claude"
+    export CLAUDE_DIR="/data/.claude"
+    echo "Updated CLAUDE_DIR to: $CLAUDE_DIR"
+fi
+
 # Ensure database directory exists and has correct permissions
 mkdir -p "$CLAUDE_DIR"
-chown -R claude:claude "$CLAUDE_DIR"
+chown -R claude:claude "$CLAUDE_DIR" 2>/dev/null || true
 
 # Check database integrity if it exists
 if [ -f "$CLAUDE_DIR/sessions.db" ]; then

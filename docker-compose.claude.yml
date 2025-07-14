@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  claude-session-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    volumes:
+      # Mount .claude directory to the expected location
+      - ~/.claude:/data/claude:rw
+    environment:
+      - PORT=8080
+      - ENV=production
+      - CLAUDE_DIR=/data/claude
+      # Enable WAL mode for better concurrency
+      - SQLITE_JOURNAL_MODE=WAL
+      - SQLITE_BUSY_TIMEOUT=10000
+    restart: unless-stopped
