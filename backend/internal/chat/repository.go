@@ -9,14 +9,23 @@ import (
 	"github.com/google/uuid"
 )
 
+// WriteOperationFunc defines a function that can perform write operations
+type WriteOperationFunc func(func(*sqlx.Tx) error) error
+
 // Repository handles database operations for chat sessions and messages
 type Repository struct {
-	db *sqlx.DB
+	db            *sqlx.DB
+	writeOperation WriteOperationFunc
 }
 
 // NewRepository creates a new chat repository
 func NewRepository(db *sqlx.DB) *Repository {
 	return &Repository{db: db}
+}
+
+// NewRepositoryWithWriteOp creates a new chat repository with write operation serialization
+func NewRepositoryWithWriteOp(db *sqlx.DB, writeOp WriteOperationFunc) *Repository {
+	return &Repository{db: db, writeOperation: writeOp}
 }
 
 // CreateChatSession creates a new chat session in the database
@@ -184,21 +193,35 @@ func (r *Repository) GetChatMessages(chatSessionID string, limit int, offset int
 
 // DeleteChatSession deletes a chat session and all its messages
 func (r *Repository) DeleteChatSession(id string) error {
+	operation := func(tx *sqlx.Tx) error {
+		// Delete messages first due to foreign key constraint
+		_, err := tx.Exec("DELETE FROM chat_messages WHERE chat_session_id = ?", id)
+		if err != nil {
+			return err
+		}
+
+		// Delete the session
+		_, err = tx.Exec("DELETE FROM chat_sessions WHERE id = ?", id)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	// Use serialized write operation if available, otherwise use direct transaction
+	if r.writeOperation != nil {
+		return r.writeOperation(operation)
+	}
+
+	// Fallback to direct transaction (legacy behavior)
 	tx, err := r.db.Beginx()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	// Delete messages first due to foreign key constraint
-	_, err = tx.Exec("DELETE FROM chat_messages WHERE chat_session_id = ?", id)
-	if err != nil {
-		return err
-	}
-
-	// Delete the session
-	_, err = tx.Exec("DELETE FROM chat_sessions WHERE id = ?", id)
-	if err != nil {
+	if err := operation(tx); err != nil {
 		return err
 	}
 
@@ -209,42 +232,56 @@ func (r *Repository) DeleteChatSession(id string) error {
 func (r *Repository) CleanupInactiveSessions(inactiveDuration time.Duration) error {
 	cutoffTime := time.Now().Add(-inactiveDuration)
 	
+	operation := func(tx *sqlx.Tx) error {
+		// Get inactive session IDs
+		var sessionIDs []string
+		query := `SELECT id FROM chat_sessions WHERE last_activity < ? AND status = ?`
+		err := tx.Select(&sessionIDs, query, cutoffTime, StatusActive)
+		if err != nil {
+			return err
+		}
+
+		// Delete messages for inactive sessions
+		if len(sessionIDs) > 0 {
+			query, args, err := sqlx.In("DELETE FROM chat_messages WHERE chat_session_id IN (?)", sessionIDs)
+			if err != nil {
+				return err
+			}
+			query = tx.Rebind(query)
+			_, err = tx.Exec(query, args...)
+			if err != nil {
+				return err
+			}
+
+			// Update session status to inactive
+			query, args, err = sqlx.In("UPDATE chat_sessions SET status = ? WHERE id IN (?)", StatusInactive, sessionIDs)
+			if err != nil {
+				return err
+			}
+			query = tx.Rebind(query)
+			_, err = tx.Exec(query, args...)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	// Use serialized write operation if available, otherwise use direct transaction
+	if r.writeOperation != nil {
+		return r.writeOperation(operation)
+	}
+
+	// Fallback to direct transaction (legacy behavior)
 	tx, err := r.db.Beginx()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	// Get inactive session IDs
-	var sessionIDs []string
-	query := `SELECT id FROM chat_sessions WHERE last_activity < ? AND status = ?`
-	err = tx.Select(&sessionIDs, query, cutoffTime, StatusActive)
-	if err != nil {
+	if err := operation(tx); err != nil {
 		return err
-	}
-
-	// Delete messages for inactive sessions
-	if len(sessionIDs) > 0 {
-		query, args, err := sqlx.In("DELETE FROM chat_messages WHERE chat_session_id IN (?)", sessionIDs)
-		if err != nil {
-			return err
-		}
-		query = tx.Rebind(query)
-		_, err = tx.Exec(query, args...)
-		if err != nil {
-			return err
-		}
-
-		// Update session status to inactive
-		query, args, err = sqlx.In("UPDATE chat_sessions SET status = ? WHERE id IN (?)", StatusInactive, sessionIDs)
-		if err != nil {
-			return err
-		}
-		query = tx.Rebind(query)
-		_, err = tx.Exec(query, args...)
-		if err != nil {
-			return err
-		}
 	}
 
 	return tx.Commit()
