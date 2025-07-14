@@ -61,7 +61,7 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
       
       {activeTab === 'sessions' ? (
         <>
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          {/* <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <button
               onClick={() => setShowNewSessionModal(true)}
               className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
@@ -69,7 +69,7 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
               <PlusIcon className="w-5 h-5" />
               <span>New Session</span>
             </button>
-          </div>
+          </div> */}
           <SessionList
             sessions={sessions}
             selectedSessionId={selectedSessionId}
