@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -20,7 +21,8 @@ var schemaFiles embed.FS
 // Database represents the SQLite database connection
 type Database struct {
 	*sqlx.DB
-	logger *logrus.Logger
+	logger     *logrus.Logger
+	writeMutex sync.Mutex // Serializes all write operations to prevent database corruption
 }
 
 // Config represents database configuration
@@ -318,7 +320,17 @@ func (db *Database) Close() error {
 	return db.DB.Close()
 }
 
+// WriteOperation executes a write operation within a serialized transaction
+// All database writes MUST go through this method to prevent corruption
+func (db *Database) WriteOperation(fn func(*sqlx.Tx) error) error {
+	db.writeMutex.Lock()
+	defer db.writeMutex.Unlock()
+	
+	return db.Transaction(fn)
+}
+
 // Transaction executes a function within a database transaction
+// WARNING: For write operations, use WriteOperation() instead to ensure serialization
 func (db *Database) Transaction(fn func(*sqlx.Tx) error) error {
 	tx, err := db.Beginx()
 	if err != nil {

@@ -102,7 +102,7 @@ func NewSQLiteServer(cfg *config.Config) (*SQLiteServer, error) {
 	var chatHandler *chat.WebSocketChatHandler
 	if cfg.Features.EnableWebSocket && wsHub != nil {
 		// Create chat repository (Database embeds *sqlx.DB, so we pass db directly)
-		chatRepo := chat.NewRepository(db.DB)
+		chatRepo := chat.NewRepositoryWithWriteOp(db.DB, db.WriteOperation)
 
 		// Create session repository for session data access
 		sessionRepo := database.NewSessionRepository(db, logger)

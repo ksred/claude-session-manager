@@ -25,47 +25,40 @@ func NewBatchOperations(db *Database, logger *logrus.Logger) *BatchOperations {
 
 // BatchImportData imports multiple sessions, messages, token usage, and tool results in a single transaction
 func (bo *BatchOperations) BatchImportData(sessions []Session, messages []Message, tokenUsages []TokenUsage, toolResults []ToolResult) error {
-	tx, err := bo.db.Beginx()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	// Batch insert sessions
-	if len(sessions) > 0 {
-		bo.logger.WithField("count", len(sessions)).Debug("Inserting sessions")
-		if err := bo.batchUpsertSessions(tx, sessions); err != nil {
-			return fmt.Errorf("failed to batch upsert sessions: %w", err)
+	return bo.db.WriteOperation(func(tx *sqlx.Tx) error {
+		// Batch insert sessions
+		if len(sessions) > 0 {
+			bo.logger.WithField("count", len(sessions)).Debug("Inserting sessions")
+			if err := bo.batchUpsertSessions(tx, sessions); err != nil {
+				return fmt.Errorf("failed to batch upsert sessions: %w", err)
+			}
 		}
-	}
 
-	// Batch insert messages
-	if len(messages) > 0 {
-		bo.logger.WithField("count", len(messages)).Debug("Inserting messages")
-		if err := bo.batchUpsertMessages(tx, messages); err != nil {
-			return fmt.Errorf("failed to batch upsert messages: %w", err)
+		// Batch insert messages
+		if len(messages) > 0 {
+			bo.logger.WithField("count", len(messages)).Debug("Inserting messages")
+			if err := bo.batchUpsertMessages(tx, messages); err != nil {
+				return fmt.Errorf("failed to batch upsert messages: %w", err)
+			}
 		}
-	}
 
-	// Batch insert token usage
-	if len(tokenUsages) > 0 {
-		if err := bo.batchUpsertTokenUsages(tx, tokenUsages); err != nil {
-			return fmt.Errorf("failed to batch upsert token usages: %w", err)
+		// Batch insert token usage
+		if len(tokenUsages) > 0 {
+			if err := bo.batchUpsertTokenUsages(tx, tokenUsages); err != nil {
+				return fmt.Errorf("failed to batch upsert token usages: %w", err)
+			}
 		}
-	}
 
-	// Batch insert tool results
-	if len(toolResults) > 0 {
-		if err := bo.batchUpsertToolResults(tx, toolResults); err != nil {
-			return fmt.Errorf("failed to batch upsert tool results: %w", err)
+		// Batch insert tool results
+		if len(toolResults) > 0 {
+			if err := bo.batchUpsertToolResults(tx, toolResults); err != nil {
+				return fmt.Errorf("failed to batch upsert tool results: %w", err)
+			}
 		}
-	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-	bo.logger.Debug("Batch transaction committed successfully")
-	return nil
+		bo.logger.Debug("Batch transaction committed successfully")
+		return nil
+	})
 }
 
 func (bo *BatchOperations) batchUpsertSessions(tx *sqlx.Tx, sessions []Session) error {
@@ -250,48 +243,41 @@ func (bo *BatchOperations) ExecuteInReadTransaction(fn func(*sqlx.Tx) error) err
 
 // BatchImportDataIncremental imports new data using INSERT OR IGNORE to preserve existing data
 func (bo *BatchOperations) BatchImportDataIncremental(sessions []Session, messages []Message, tokenUsages []TokenUsage, toolResults []ToolResult) error {
-	tx, err := bo.db.Beginx()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	// For incremental imports, we need to update session metadata intelligently
-	// First, update sessions with new activity data
-	if len(sessions) > 0 {
-		bo.logger.WithField("count", len(sessions)).Debug("Updating session metadata incrementally")
-		if err := bo.batchUpdateSessionsIncremental(tx, sessions); err != nil {
-			return fmt.Errorf("failed to update sessions incrementally: %w", err)
+	return bo.db.WriteOperation(func(tx *sqlx.Tx) error {
+		// For incremental imports, we need to update session metadata intelligently
+		// First, update sessions with new activity data
+		if len(sessions) > 0 {
+			bo.logger.WithField("count", len(sessions)).Debug("Updating session metadata incrementally")
+			if err := bo.batchUpdateSessionsIncremental(tx, sessions); err != nil {
+				return fmt.Errorf("failed to update sessions incrementally: %w", err)
+			}
 		}
-	}
 
-	// Insert new messages (ignore duplicates)
-	if len(messages) > 0 {
-		bo.logger.WithField("count", len(messages)).Debug("Inserting new messages")
-		if err := bo.batchInsertMessagesIncremental(tx, messages); err != nil {
-			return fmt.Errorf("failed to insert messages incrementally: %w", err)
+		// Insert new messages (ignore duplicates)
+		if len(messages) > 0 {
+			bo.logger.WithField("count", len(messages)).Debug("Inserting new messages")
+			if err := bo.batchInsertMessagesIncremental(tx, messages); err != nil {
+				return fmt.Errorf("failed to insert messages incrementally: %w", err)
+			}
 		}
-	}
 
-	// Insert new token usage (ignore duplicates)
-	if len(tokenUsages) > 0 {
-		if err := bo.batchInsertTokenUsageIncremental(tx, tokenUsages); err != nil {
-			return fmt.Errorf("failed to insert token usage incrementally: %w", err)
+		// Insert new token usage (ignore duplicates)
+		if len(tokenUsages) > 0 {
+			if err := bo.batchInsertTokenUsageIncremental(tx, tokenUsages); err != nil {
+				return fmt.Errorf("failed to insert token usage incrementally: %w", err)
+			}
 		}
-	}
 
-	// Insert new tool results (ignore duplicates)
-	if len(toolResults) > 0 {
-		if err := bo.batchInsertToolResultsIncremental(tx, toolResults); err != nil {
-			return fmt.Errorf("failed to insert tool results incrementally: %w", err)
+		// Insert new tool results (ignore duplicates)
+		if len(toolResults) > 0 {
+			if err := bo.batchInsertToolResultsIncremental(tx, toolResults); err != nil {
+				return fmt.Errorf("failed to insert tool results incrementally: %w", err)
+			}
 		}
-	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit incremental transaction: %w", err)
-	}
-	bo.logger.Debug("Incremental batch transaction committed successfully")
-	return nil
+		bo.logger.Debug("Incremental batch transaction committed successfully")
+		return nil
+	})
 }
 
 // batchUpdateSessionsIncremental updates session metadata without replacing existing data
