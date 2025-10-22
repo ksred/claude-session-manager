@@ -468,7 +468,14 @@ func (r *SessionRepository) GetSessionActivity(sessionID string, limit int) ([]*
 			FROM activity_log al
 			WHERE al.session_id = ?
 		)
-		SELECT DISTINCT * FROM combined_activity
+		SELECT 
+			COALESCE(id, ROW_NUMBER() OVER (ORDER BY timestamp DESC)) as id,
+			session_id,
+			activity_type,
+			details,
+			timestamp,
+			created_at
+		FROM combined_activity
 		ORDER BY timestamp DESC
 		LIMIT ?
 	`
@@ -567,7 +574,14 @@ func (r *SessionRepository) GetProjectActivity(projectName string, limit int) ([
 			FROM activity_log al
 			WHERE al.session_id IN (SELECT id FROM project_sessions)
 		)
-		SELECT DISTINCT * FROM combined_activity
+		SELECT 
+			COALESCE(id, ROW_NUMBER() OVER (ORDER BY timestamp DESC)) as id,
+			session_id,
+			activity_type,
+			details,
+			timestamp,
+			created_at
+		FROM combined_activity
 		ORDER BY timestamp DESC
 		LIMIT ?
 	`
@@ -779,17 +793,18 @@ func (r *SessionRepository) GetTokenTimeline(hours int, granularity string) ([]T
 	query := `
 		SELECT 
 			strftime(?, m.timestamp) as timestamp,
-			SUM(tu.input_tokens) as input_tokens,
-			SUM(tu.output_tokens) as output_tokens,
-			SUM(tu.cache_creation_input_tokens) as cache_creation_tokens,
-			SUM(tu.cache_read_input_tokens) as cache_read_tokens,
-			SUM(tu.input_tokens + tu.output_tokens + tu.cache_creation_input_tokens + tu.cache_read_input_tokens) as total_tokens,
-			SUM(tu.estimated_cost) as estimated_cost,
+			COALESCE(SUM(tu.input_tokens), 0) as input_tokens,
+			COALESCE(SUM(tu.output_tokens), 0) as output_tokens,
+			COALESCE(SUM(tu.cache_creation_input_tokens), 0) as cache_creation_tokens,
+			COALESCE(SUM(tu.cache_read_input_tokens), 0) as cache_read_tokens,
+			COALESCE(SUM(tu.input_tokens + tu.output_tokens + tu.cache_creation_input_tokens + tu.cache_read_input_tokens), 0) as total_tokens,
+			COALESCE(SUM(tu.estimated_cost), 0.0) as estimated_cost,
 			COUNT(DISTINCT m.id) as message_count
 		FROM messages m
-		JOIN token_usage tu ON m.id = tu.message_id
+		LEFT JOIN token_usage tu ON m.id = tu.message_id
 		WHERE m.timestamp >= datetime('now', '-' || ? || ' hours')
 		GROUP BY strftime(?, m.timestamp)
+		HAVING COUNT(m.id) > 0
 		ORDER BY timestamp ASC
 	`
 
@@ -828,6 +843,7 @@ func (r *SessionRepository) GetSessionTokenTimeline(sessionID string, hours int,
 		WHERE m.session_id = ?
 		AND m.timestamp >= datetime('now', '-' || ? || ' hours')
 		GROUP BY strftime(?, m.timestamp)
+		HAVING COUNT(m.id) > 0
 		ORDER BY timestamp ASC
 	`
 
@@ -854,18 +870,19 @@ func (r *SessionRepository) GetProjectTokenTimeline(projectName string, hours in
 	query := `
 		SELECT 
 			strftime(?, m.timestamp) as timestamp,
-			SUM(tu.input_tokens) as input_tokens,
-			SUM(tu.output_tokens) as output_tokens,
-			SUM(tu.cache_creation_input_tokens) as cache_creation_tokens,
-			SUM(tu.cache_read_input_tokens) as cache_read_tokens,
-			SUM(tu.input_tokens + tu.output_tokens + tu.cache_creation_input_tokens + tu.cache_read_input_tokens) as total_tokens,
-			SUM(tu.estimated_cost) as estimated_cost,
+			COALESCE(SUM(tu.input_tokens), 0) as input_tokens,
+			COALESCE(SUM(tu.output_tokens), 0) as output_tokens,
+			COALESCE(SUM(tu.cache_creation_input_tokens), 0) as cache_creation_tokens,
+			COALESCE(SUM(tu.cache_read_input_tokens), 0) as cache_read_tokens,
+			COALESCE(SUM(tu.input_tokens + tu.output_tokens + tu.cache_creation_input_tokens + tu.cache_read_input_tokens), 0) as total_tokens,
+			COALESCE(SUM(tu.estimated_cost), 0.0) as estimated_cost,
 			COUNT(DISTINCT m.id) as message_count
 		FROM messages m
-		JOIN token_usage tu ON m.id = tu.message_id
+		LEFT JOIN token_usage tu ON m.id = tu.message_id
 		JOIN sessions s ON m.session_id = s.id
 		WHERE s.project_name = ? AND m.timestamp >= datetime('now', '-' || ? || ' hours')
 		GROUP BY strftime(?, m.timestamp)
+		HAVING COUNT(m.id) > 0
 		ORDER BY timestamp ASC
 	`
 

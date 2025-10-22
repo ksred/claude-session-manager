@@ -290,9 +290,12 @@ func (h *SQLiteHandlers) GetSessionActivityHandler(c *gin.Context) {
 	sessionID := c.Param("id")
 
 	limitStr := c.DefaultQuery("limit", "50")
-	limit := 50
-	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
-		limit = l
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
 	}
 
 	activities, err := h.readOptimized.GetSessionActivityOptimized(sessionID, limit)
@@ -321,9 +324,12 @@ func (h *SQLiteHandlers) GetProjectActivityHandler(c *gin.Context) {
 	projectName := c.Param("projectName")
 
 	limitStr := c.DefaultQuery("limit", "50")
-	limit := 50
-	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
-		limit = l
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
 	}
 
 	activities, err := h.repo.GetProjectActivity(projectName, limit)
