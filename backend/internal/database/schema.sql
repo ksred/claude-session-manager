@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS messages (
 -- Token usage table - tracks token consumption per message
 CREATE TABLE IF NOT EXISTS token_usage (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    message_id TEXT NOT NULL,
+    message_id TEXT NOT NULL UNIQUE,
     session_id TEXT NOT NULL,
     input_tokens INTEGER DEFAULT 0,
     output_tokens INTEGER DEFAULT 0,

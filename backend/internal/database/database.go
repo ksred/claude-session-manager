@@ -193,6 +193,106 @@ func (db *Database) applySchemaUpdates() error {
 		}
 	}
 
+	// Check if token_usage table has UNIQUE constraint on message_id
+	// Without it, INSERT OR REPLACE never deduplicates (PK is AUTOINCREMENT),
+	// causing duplicate rows on every re-import
+	if err := db.migrateTokenUsageUniqueConstraint(); err != nil {
+		return fmt.Errorf("failed to migrate token_usage unique constraint: %w", err)
+	}
+
+	return nil
+}
+
+// migrateTokenUsageUniqueConstraint checks if token_usage.message_id has a UNIQUE
+// constraint and applies the migration if missing. This also deduplicates any
+// existing rows that were created by the INSERT-without-real-UPSERT bug.
+func (db *Database) migrateTokenUsageUniqueConstraint() error {
+	// Check if the UNIQUE index already exists on message_id
+	var hasUnique bool
+	err := db.Get(&hasUnique, `
+		SELECT COUNT(*) > 0
+		FROM pragma_index_list('token_usage') il
+		JOIN pragma_index_info(il.name) ii ON ii.name = 'message_id'
+		WHERE il."unique" = 1
+	`)
+	if err != nil {
+		// If pragma query fails, check via a different method
+		// Try to see if there's a sqlite_autoindex for the UNIQUE constraint
+		err = db.Get(&hasUnique, `
+			SELECT COUNT(*) > 0
+			FROM sqlite_master
+			WHERE type = 'index'
+			AND tbl_name = 'token_usage'
+			AND sql LIKE '%UNIQUE%'
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to check token_usage constraints: %w", err)
+		}
+	}
+
+	if hasUnique {
+		return nil // Already migrated
+	}
+
+	db.logger.Info("Migrating token_usage table: adding UNIQUE constraint on message_id and deduplicating rows")
+
+	// Count duplicates for logging
+	var dupCount int
+	_ = db.Get(&dupCount, `
+		SELECT COUNT(*) - COUNT(DISTINCT message_id) FROM token_usage
+	`)
+	if dupCount > 0 {
+		db.logger.WithField("duplicate_rows", dupCount).Info("Found duplicate token_usage rows to clean up")
+	}
+
+	// Perform the migration in a transaction:
+	// 1. Delete duplicate rows (keep the one with highest id per message_id)
+	// 2. Recreate the table with UNIQUE constraint using rename pattern
+	_, err = db.Exec(`
+		-- Step 1: Remove duplicate rows, keeping only the row with the highest id
+		DELETE FROM token_usage
+		WHERE id NOT IN (
+			SELECT MAX(id)
+			FROM token_usage
+			GROUP BY message_id
+		);
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to deduplicate token_usage rows: %w", err)
+	}
+
+	// Step 2: Recreate table with UNIQUE constraint (SQLite doesn't support ALTER ADD CONSTRAINT)
+	_, err = db.Exec(`
+		ALTER TABLE token_usage RENAME TO token_usage_old;
+
+		CREATE TABLE token_usage (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			message_id TEXT NOT NULL UNIQUE,
+			session_id TEXT NOT NULL,
+			input_tokens INTEGER DEFAULT 0,
+			output_tokens INTEGER DEFAULT 0,
+			cache_creation_input_tokens INTEGER DEFAULT 0,
+			cache_read_input_tokens INTEGER DEFAULT 0,
+			total_tokens INTEGER DEFAULT 0,
+			service_tier TEXT,
+			estimated_cost REAL DEFAULT 0.0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+			FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+		);
+
+		INSERT INTO token_usage SELECT * FROM token_usage_old;
+
+		DROP TABLE token_usage_old;
+
+		CREATE INDEX IF NOT EXISTS idx_token_usage_session_id ON token_usage(session_id);
+		CREATE INDEX IF NOT EXISTS idx_token_usage_message_id ON token_usage(message_id);
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to recreate token_usage with UNIQUE constraint: %w", err)
+	}
+
+	db.logger.Info("Successfully migrated token_usage table with UNIQUE constraint")
 	return nil
 }
 
