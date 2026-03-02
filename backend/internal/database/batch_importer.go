@@ -111,9 +111,13 @@ func (bi *BatchImporter) importJSONLFileOptimized(filePath string, projectInfo P
 	// Collect all data first
 	var sessions []Session
 	var messages []Message
-	var tokenUsages []TokenUsage
 	var toolResults []ToolResult
 	sessionMap := make(map[string]*Session)
+	// Token dedup: Claude Code JSONL writes multiple messages per API call
+	// (one per content block), all sharing the same requestId with identical
+	// usage data. Use a map keyed by requestId to keep only the last entry.
+	tokenUsageByRequestID := make(map[string]TokenUsage)
+	var tokenUsagesNoRequestID []TokenUsage
 
 	lineNum := 0
 	for scanner.Scan() {
@@ -202,7 +206,8 @@ func (bi *BatchImporter) importJSONLFileOptimized(filePath string, projectInfo P
 		}
 		messages = append(messages, dbMessage)
 
-		// Handle token usage (only if not skipping this message)
+		// Handle token usage — deduplicate by requestId to avoid counting
+		// identical usage data from multiple content blocks in one API call
 		if msg.Message.Usage != nil {
 			usage := TokenUsage{
 				MessageID:                msg.UUID,
@@ -212,11 +217,11 @@ func (bi *BatchImporter) importJSONLFileOptimized(filePath string, projectInfo P
 				CacheCreationInputTokens: msg.Message.Usage.CacheCreationInputTokens,
 				CacheReadInputTokens:     msg.Message.Usage.CacheReadInputTokens,
 			}
-			
+
 			// Calculate total tokens
-			usage.TotalTokens = usage.InputTokens + usage.OutputTokens + 
+			usage.TotalTokens = usage.InputTokens + usage.OutputTokens +
 				usage.CacheCreationInputTokens + usage.CacheReadInputTokens
-			
+
 			// Calculate cost
 			model := ""
 			if s, ok := sessionMap[sessionID]; ok {
@@ -226,8 +231,13 @@ func (bi *BatchImporter) importJSONLFileOptimized(filePath string, projectInfo P
 				model = *msg.Message.Model
 			}
 			usage.EstimatedCost = bi.calculateTokenCost(&usage, model)
-			
-			tokenUsages = append(tokenUsages, usage)
+
+			if msg.RequestID != nil && *msg.RequestID != "" {
+				// Overwrite: last message per requestId wins (has final output_tokens)
+				tokenUsageByRequestID[*msg.RequestID] = usage
+			} else {
+				tokenUsagesNoRequestID = append(tokenUsagesNoRequestID, usage)
+			}
 		}
 
 		// Extract tool results (only if not skipping this message)
@@ -278,6 +288,13 @@ func (bi *BatchImporter) importJSONLFileOptimized(filePath string, projectInfo P
 	if err := scanner.Err(); err != nil {
 		return 0, 0, fmt.Errorf("failed to read file: %w", err)
 	}
+
+	// Merge deduplicated token usages into a single slice
+	tokenUsages := make([]TokenUsage, 0, len(tokenUsageByRequestID)+len(tokenUsagesNoRequestID))
+	for _, usage := range tokenUsageByRequestID {
+		tokenUsages = append(tokenUsages, usage)
+	}
+	tokenUsages = append(tokenUsages, tokenUsagesNoRequestID...)
 
 	// Convert session map to slice and finalize session data
 	for _, session := range sessionMap {

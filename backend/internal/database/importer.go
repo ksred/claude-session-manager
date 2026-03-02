@@ -464,6 +464,17 @@ func (i *Importer) importSession(sessionID string, messages []JSONLMessage, proj
 		return fmt.Errorf("failed to upsert session: %w", err)
 	}
 
+	// Build requestId dedup map: Claude Code JSONL writes multiple messages per API
+	// call (one per content block), all sharing the same requestId with identical
+	// usage data. Only count tokens once per requestId to avoid inflation.
+	requestIDToUUID := make(map[string]string)
+	for _, msg := range messages {
+		if msg.RequestID != nil && *msg.RequestID != "" && msg.Message.Usage != nil {
+			// Overwrite: last message per requestId wins (has final output_tokens)
+			requestIDToUUID[*msg.RequestID] = msg.UUID
+		}
+	}
+
 	// Insert messages and related data
 	for _, msg := range messages {
 		// Convert content to JSON string
@@ -493,8 +504,19 @@ func (i *Importer) importSession(sessionID string, messages []JSONLMessage, proj
 			return fmt.Errorf("failed to upsert message: %w", err)
 		}
 
-		// Handle token usage
+		// Handle token usage — only for the designated message per requestId
+		// to avoid counting duplicate usage data from multiple content blocks
+		shouldCountTokens := false
 		if msg.Message.Usage != nil {
+			if msg.RequestID == nil || *msg.RequestID == "" {
+				// No requestId — count it (legacy/edge case)
+				shouldCountTokens = true
+			} else if requestIDToUUID[*msg.RequestID] == msg.UUID {
+				// This is the last message for this requestId — count it
+				shouldCountTokens = true
+			}
+		}
+		if shouldCountTokens {
 			usage := &TokenUsage{
 				MessageID:                msg.UUID,
 				SessionID:                sessionID,
