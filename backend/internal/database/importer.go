@@ -388,14 +388,27 @@ func (i *Importer) importSession(sessionID string, messages []JSONLMessage, proj
 	}
 
 	// Calculate session metadata
-	startTime := messages[0].Timestamp
-	lastActivity := messages[0].Timestamp
+	var startTime time.Time
+	var lastActivity time.Time
 	var model string
 	var actualProjectPath string
 	var actualProjectName string
-	
+
 	for _, msg := range messages {
-		if msg.Timestamp.Before(startTime) {
+		// Skip messages with no timestamp (e.g. file-history-snapshot, custom-title)
+		// to avoid duration calculation overflow from Go's zero time (0001-01-01)
+		if msg.Timestamp.IsZero() {
+			// Still extract non-timestamp metadata from these messages
+			if msg.Message.Model != nil {
+				model = *msg.Message.Model
+			}
+			if msg.CWD != "" && actualProjectPath == "" {
+				actualProjectPath = msg.CWD
+				actualProjectName = filepath.Base(actualProjectPath)
+			}
+			continue
+		}
+		if startTime.IsZero() || msg.Timestamp.Before(startTime) {
 			startTime = msg.Timestamp
 		}
 		if msg.Timestamp.After(lastActivity) {
@@ -409,6 +422,12 @@ func (i *Importer) importSession(sessionID string, messages []JSONLMessage, proj
 			actualProjectPath = msg.CWD
 			actualProjectName = filepath.Base(actualProjectPath)
 		}
+	}
+
+	// Guard: if no messages had valid timestamps, skip this session
+	if startTime.IsZero() {
+		i.logger.WithField("session_id", sessionID).Warn("No valid timestamps found in session, skipping")
+		return nil
 	}
 	
 	// Fallback to parsed project info if no CWD found in messages

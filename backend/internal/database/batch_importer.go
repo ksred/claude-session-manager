@@ -145,7 +145,7 @@ func (bi *BatchImporter) importJSONLFileOptimized(filePath string, projectInfo P
 				actualProjectPath = msg.CWD
 				actualProjectName = filepath.Base(actualProjectPath)
 			}
-			
+
 			session = &Session{
 				ID:             sessionID,
 				ProjectPath:    actualProjectPath,
@@ -167,11 +167,15 @@ func (bi *BatchImporter) importJSONLFileOptimized(filePath string, projectInfo P
 			sessionMap[sessionID] = session
 		} else {
 			// Update session metadata
-			if msg.Timestamp.Before(session.StartTime) {
-				session.StartTime = msg.Timestamp
-			}
-			if msg.Timestamp.After(session.LastActivity) {
-				session.LastActivity = msg.Timestamp
+			// Skip zero timestamps (e.g. file-history-snapshot, custom-title entries)
+			// to avoid duration overflow from Go's zero time (0001-01-01)
+			if !msg.Timestamp.IsZero() {
+				if session.StartTime.IsZero() || msg.Timestamp.Before(session.StartTime) {
+					session.StartTime = msg.Timestamp
+				}
+				if msg.Timestamp.After(session.LastActivity) {
+					session.LastActivity = msg.Timestamp
+				}
 			}
 			session.MessageCount++
 			if msg.Message.Model != nil {
@@ -277,6 +281,11 @@ func (bi *BatchImporter) importJSONLFileOptimized(filePath string, projectInfo P
 
 	// Convert session map to slice and finalize session data
 	for _, session := range sessionMap {
+		// Skip sessions where all messages had zero timestamps
+		if session.StartTime.IsZero() {
+			bi.logger.WithField("session_id", session.ID).Warn("No valid timestamps found in session, skipping")
+			continue
+		}
 		duration := session.LastActivity.Sub(session.StartTime)
 		session.DurationSeconds = int64(duration.Seconds())
 		session.IsActive = time.Since(session.LastActivity) < 2*time.Minute
